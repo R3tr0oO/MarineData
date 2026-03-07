@@ -56,6 +56,12 @@ body{font-family:'Instrument Sans',sans-serif;background:var(--bg);color:var(--t
 .opa-row input[type=range]{flex:1;height:4px;-webkit-appearance:none;background:var(--border);border-radius:2px;outline:none}
 .opa-row input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:var(--accent);cursor:pointer}
 .lsep{margin-top:8px;border-top:1px solid var(--border);padding-top:8px}
+.soil-item{display:flex;align-items:center;gap:7px;margin:3px 0;cursor:pointer;padding:2px 0;border-radius:4px;transition:opacity .15s}.soil-item:hover{opacity:.85}
+.soil-item.off{opacity:.3}.soil-item.off .soil-swatch{border:1px dashed var(--text2)}
+.soil-swatch{width:14px;height:10px;border-radius:2px;flex-shrink:0;transition:all .15s}
+.soil-label{font-size:10px;color:var(--text2);flex:1;user-select:none}
+.soil-count{font-family:'DM Mono',monospace;font-size:8px;color:var(--text2);opacity:.6}
+.soil-actions{display:flex;gap:4px;margin:6px 0 2px}.soil-act{font-size:9px;color:var(--accent);background:none;border:1px solid var(--border);border-radius:4px;padding:2px 6px;cursor:pointer;font-family:'DM Mono',monospace;transition:all .12s}.soil-act:hover{border-color:var(--accent);background:rgba(0,229,255,.08)}
 @media(max-width:768px){:root{--pw:100vw;--th:auto}.tb{flex-wrap:wrap;padding:8px 10px;gap:6px;height:auto}.logo{width:100%;font-size:14px}.logo span{display:none}.ctrls{flex-wrap:wrap}.ig-l{flex:1 1 100%}.ig-d{flex:1}.btn-go{flex:1}.pnl{top:0;width:100vw;border-left:none}.lgd{bottom:8px;right:8px;max-width:180px}.tst{bottom:8px;left:8px;right:8px;max-width:none;font-size:10px}}
 @media(min-width:769px)and(max-width:1100px){:root{--pw:320px}}
 .leaflet-popup-content-wrapper{background:var(--bg2)!important;color:var(--text)!important;border:1px solid var(--border)!important;border-radius:8px!important;font-family:'DM Mono',monospace!important;font-size:11px!important}
@@ -180,514 +186,617 @@ body{font-family:'Instrument Sans',sans-serif;background:var(--bg);color:var(--t
   </div>
   <div id="lLeg" style="display:none" class="lsep">
     <div style="font-size:9px;color:var(--text2);font-family:'DM Mono',monospace;margin-bottom:4px">SÉDIMENTOLOGIE</div>
-    <div class="lr"><div style="width:14px;height:10px;border-radius:2px;background:rgb(180,100,40)"></div><span style="color:var(--text2);font-size:10px">Roche</span></div>
-    <div class="lr"><div style="width:14px;height:10px;border-radius:2px;background:rgb(230,210,80)"></div><span style="color:var(--text2);font-size:10px">Sable</span></div>
-    <div class="lr"><div style="width:14px;height:10px;border-radius:2px;background:rgb(70,140,70)"></div><span style="color:var(--text2);font-size:10px">Vase</span></div>
-    <div class="lr"><div style="width:14px;height:10px;border-radius:2px;background:rgb(160,120,200)"></div><span style="color:var(--text2);font-size:10px">Argile pélagique</span></div>
-    <div class="lr"><div style="width:14px;height:10px;border-radius:2px;background:rgb(210,140,60)"></div><span style="color:var(--text2);font-size:10px">Séd. turbiditiques</span></div>
-    <div class="lr"><div style="width:14px;height:10px;border-radius:2px;background:rgb(200,60,60)"></div><span style="color:var(--text2);font-size:10px">Séd. volcaniques</span></div>
-    <div class="lr"><div style="width:14px;height:10px;border-radius:2px;background:rgb(60,200,200)"></div><span style="color:var(--text2);font-size:10px">Corail</span></div>
-    <div class="lr"><div style="width:14px;height:10px;border-radius:2px;background:rgb(140,140,140)"></div><span style="color:var(--text2);font-size:10px">Gravier</span></div>
+    <div class="soil-actions">
+      <button class="soil-act" onclick="setAllSoilTypes(true)">Tout</button>
+      <button class="soil-act" onclick="setAllSoilTypes(false)">Aucun</button>
+    </div>
+    <div id="lLegItems"></div>
     <div id="lLegExtra"></div>
     <div class="opa-row"><label>Opacité</label><input type="range" min="0" max="100" value="55" id="oSL" oninput="setLOp(+this.value)"></div>
   </div>
 </div>
 
 <script>
+// ═══════════════════════════════════════════════════════════
+//  MARINE DATA — Complete rewrite with unified layer system
+// ═══════════════════════════════════════════════════════════
+
 // ──────────── GLOBALS ────────────
-var G=null, IL=null, PM=[], SR=null, PO=false;
-var bathyLayer=null, currLayer=null, lithoLayer=null;
-var CUR=null, LITHO=null;
-var MAX_CELLS=800000;
+var G = null;           // bathymetry grid {la, lo, nr, nc, flat}
+var CUR = null;         // currents grid {lats, lons, u, v, nr, nc}
+var LITHO = null;       // lithology grid {lats, lons, grid, nr, nc, labels}
+var LITHO_MASK = null;  // pre-computed Uint8Array mask for visible litho cells
+var LITHO_FILTERS = new Set; // which soil type IDs are currently visible (all by default)
+
+// Default soil labels (used if CSV has numeric IDs without labels)
+var DEFAULT_SOIL_LABELS = {
+  0: 'Roche', 1: 'Sable', 2: 'Vase', 3: 'Argile pélagique',
+  4: 'Séd. turbiditiques', 5: 'Séd. volcaniques', 6: 'Corail', 7: 'Gravier'
+};
+
+var bathyLayer = null;
+var currLayer = null;
+var lithoLayer = null;
+var IL = null;          // isobath layer group
+var PM = [];            // port markers
+var SR = null;          // search rectangle
+var PO = false;         // panel open
+
+var MAX_CELLS = 800000;
+
+// ──────────── DOM HELPER ────────────
+function $(id) { return document.getElementById(id); }
+function tick() { return new Promise(function(r) { setTimeout(r, 20); }); }
+
+// ──────────── CONSTANTS ────────────
+var SOIL_COL = {
+  0: [180, 100, 40],   1: [230, 210, 80],  2: [70, 140, 70],   3: [160, 120, 200],
+  4: [210, 140, 60],   5: [200, 60, 60],   6: [60, 200, 200],  7: [140, 140, 140],
+  8: [100, 180, 120],  9: [220, 160, 200], 10: [80, 120, 200], 11: [200, 200, 100],
+  12: [170, 80, 160], 13: [100, 200, 180], 14: [220, 120, 100], 15: [130, 170, 220],
+  16: [200, 180, 140], 17: [90, 160, 160], 18: [180, 140, 180], 19: [160, 200, 80]
+};
+var SOIL_FB = [100, 100, 100];
+
+var DEPTH_COLORS = [
+  { d: 0,     r: 180, g: 238, b: 240 }, { d: 50,    r: 130, g: 215, b: 230 },
+  { d: 100,   r: 80,  g: 190, b: 220 }, { d: 200,   r: 45,  g: 150, b: 200 },
+  { d: 500,   r: 25,  g: 100, b: 180 }, { d: 1000,  r: 15,  g: 60,  b: 150 },
+  { d: 2000,  r: 10,  g: 35,  b: 110 }, { d: 3000,  r: 8,   g: 20,  b: 80  },
+  { d: 5000,  r: 5,   g: 12,  b: 55  }, { d: 11000, r: 3,   g: 5,   b: 30  }
+];
+
+var HYCOM_DEPTHS = [0,2,4,6,8,10,12,15,20,25,30,35,40,45,50,60,70,80,90,100,
+  125,150,200,250,300,350,400,500,600,700,800,900,1000,1250,1500,2000,2500,3000,4000,5000];
+
+var colorLUT = null;
+
+// ──────────── CORE UTILITIES ────────────
+
+// Binary search on ASCENDING sorted array → nearest index
+function bSearch(arr, val) {
+  var lo = 0, hi = arr.length - 1;
+  if (val <= arr[lo]) return lo;
+  if (val >= arr[hi]) return hi;
+  while (hi - lo > 1) {
+    var mid = (lo + hi) >> 1;
+    if (arr[mid] <= val) lo = mid; else hi = mid;
+  }
+  return (val - arr[lo]) < (arr[hi] - val) ? lo : hi;
+}
+
+// Depth → RGB color
+function depthColor(d) {
+  if (d <= 0) return null;
+  var CM = DEPTH_COLORS;
+  for (var i = 1; i < CM.length; i++) {
+    if (d <= CM[i].d) {
+      var a = CM[i - 1], b = CM[i], t = (d - a.d) / (b.d - a.d);
+      return [a.r + (b.r - a.r) * t | 0, a.g + (b.g - a.g) * t | 0, a.b + (b.b - a.b) * t | 0];
+    }
+  }
+  var last = CM[CM.length - 1];
+  return [last.r, last.g, last.b];
+}
+
+// CSS gradient for depth legend
+function depthGradientCSS() {
+  return 'linear-gradient(90deg,' + DEPTH_COLORS.slice(0, 7).map(function(c, i) {
+    return 'rgb(' + c.r + ',' + c.g + ',' + c.b + ') ' + (i / 6 * 100 | 0) + '%';
+  }).join(',') + ')';
+}
+
+// Build color lookup table for fast pixel rendering
+function buildLUT(maxDepth) {
+  var n = Math.min(maxDepth + 1, 12000);
+  colorLUT = new Uint8Array(n * 3);
+  for (var d = 0; d < n; d++) {
+    var c = depthColor(d);
+    if (c) { colorLUT[d * 3] = c[0]; colorLUT[d * 3 + 1] = c[1]; colorLUT[d * 3 + 2] = c[2]; }
+  }
+}
+
+function snapToHYCOM(d) {
+  var best = HYCOM_DEPTHS[0], bd = Math.abs(d - best);
+  for (var i = 0; i < HYCOM_DEPTHS.length; i++) {
+    var dd = Math.abs(d - HYCOM_DEPTHS[i]);
+    if (dd < bd) { bd = dd; best = HYCOM_DEPTHS[i]; }
+  }
+  return best;
+}
+
+function haversine(lat1, lon1, lat2, lon2) {
+  var R = 6371, dLat = (lat2 - lat1) * Math.PI / 180, dLon = (lon2 - lon1) * Math.PI / 180;
+  var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// ──────────── GRID NORMALIZATION ────────────
+// Ensures G.la and G.lo are ALWAYS in ascending order.
+// This is critical: bSearch requires ascending arrays.
+// ASC files produce descending latitudes → must reverse.
+function normalizeGrid(grid) {
+  if (!grid || grid.nr < 2) return;
+  var nr = grid.nr, nc = grid.nc, flat = grid.flat;
+
+  // Check if latitudes need reversing (descending → ascending)
+  if (grid.la[0] > grid.la[nr - 1]) {
+    // Reverse the latitude array
+    var newLa = new Float64Array(nr);
+    for (var i = 0; i < nr; i++) newLa[i] = grid.la[nr - 1 - i];
+    // Reverse the rows of the flat grid
+    var newFlat = new Float32Array(nr * nc);
+    for (var r = 0; r < nr; r++) {
+      var srcRow = nr - 1 - r;
+      for (var c = 0; c < nc; c++) {
+        newFlat[r * nc + c] = flat[srcRow * nc + c];
+      }
+    }
+    grid.la = newLa;
+    grid.flat = newFlat;
+  }
+
+  // Check if longitudes need reversing (shouldn't happen normally, but be safe)
+  if (grid.lo[0] > grid.lo[nc - 1]) {
+    var newLo = new Float64Array(nc);
+    for (var i = 0; i < nc; i++) newLo[i] = grid.lo[nc - 1 - i];
+    var newFlat2 = new Float32Array(nr * nc);
+    for (var r = 0; r < nr; r++) {
+      for (var c = 0; c < nc; c++) {
+        newFlat2[r * nc + c] = grid.flat[r * nc + (nc - 1 - c)];
+      }
+    }
+    grid.lo = newLo;
+    grid.flat = newFlat2;
+  }
+}
+
+// ──────────── DEPTH LOOKUP (cross-grid) ────────────
+// Bilinear interpolation of bathy depth at any lat/lon.
+// Returns NaN for land / no-data.
+function getDepthAt(lat, lon) {
+  if (!G) return NaN;
+  var la = G.la, lo = G.lo, nr = G.nr, nc = G.nc, flat = G.flat;
+
+  // Find bounding row indices
+  var rLo = 0, rHi = nr - 1;
+  if (lat <= la[0]) { rLo = 0; rHi = 0; }
+  else if (lat >= la[nr - 1]) { rLo = nr - 1; rHi = nr - 1; }
+  else {
+    var lo2 = 0, hi2 = nr - 1;
+    while (hi2 - lo2 > 1) { var mid = (lo2 + hi2) >> 1; if (la[mid] <= lat) lo2 = mid; else hi2 = mid; }
+    rLo = lo2; rHi = hi2;
+  }
+
+  // Find bounding col indices
+  var cLo = 0, cHi = nc - 1;
+  if (lon <= lo[0]) { cLo = 0; cHi = 0; }
+  else if (lon >= lo[nc - 1]) { cLo = nc - 1; cHi = nc - 1; }
+  else {
+    var lo3 = 0, hi3 = nc - 1;
+    while (hi3 - lo3 > 1) { var mid = (lo3 + hi3) >> 1; if (lo[mid] <= lon) lo3 = mid; else hi3 = mid; }
+    cLo = lo3; cHi = hi3;
+  }
+
+  // Four corner depths
+  var d00 = flat[rLo * nc + cLo];
+  var d01 = flat[rLo * nc + cHi];
+  var d10 = flat[rHi * nc + cLo];
+  var d11 = flat[rHi * nc + cHi];
+
+  // If all corners are NaN, return NaN
+  if (isNaN(d00) && isNaN(d01) && isNaN(d10) && isNaN(d11)) return NaN;
+
+  // If any corner is NaN or land (<=0), fallback to nearest valid neighbor
+  if (isNaN(d00) || d00 <= 0 || isNaN(d01) || d01 <= 0 ||
+      isNaN(d10) || d10 <= 0 || isNaN(d11) || d11 <= 0) {
+    // Nearest-neighbor fallback
+    var rN = bSearch(la, lat), cN = bSearch(lo, lon);
+    return flat[rN * nc + cN];
+  }
+
+  // Bilinear interpolation weights
+  var tLat = (rLo === rHi) ? 0 : (lat - la[rLo]) / (la[rHi] - la[rLo]);
+  var tLon = (cLo === cHi) ? 0 : (lon - lo[cLo]) / (lo[cHi] - lo[cLo]);
+  tLat = Math.max(0, Math.min(1, tLat));
+  tLon = Math.max(0, Math.min(1, tLon));
+
+  return d00 * (1 - tLat) * (1 - tLon) + d01 * (1 - tLat) * tLon +
+         d10 * tLat * (1 - tLon) + d11 * tLat * tLon;
+}
+
+// ──────────── PRE-COMPUTE LITHO MASK ────────────
+// Builds a Uint8Array (0 = hidden, 1 = visible) for every litho cell.
+// Visible = ocean (depth > 0) AND soil type is in LITHO_FILTERS.
+// Runs ONCE when litho is loaded or when soil type filters change, NOT per tile.
+function computeLithoMask() {
+  if (!LITHO || !G) { LITHO_MASK = null; return 0; }
+
+  var nr = LITHO.nr, nc = LITHO.nc;
+  var grid = LITHO.grid;
+  var lats = LITHO.lats, lons = LITHO.lons;
+  var mask = new Uint8Array(nr * nc); // all 0 = hidden
+
+  var visibleCount = 0;
+  for (var r = 0; r < nr; r++) {
+    var lat = lats[r];
+    for (var c = 0; c < nc; c++) {
+      var soilId = grid[r * nc + c];
+      if (soilId === 255) continue; // no litho data
+
+      // Check soil type filter
+      if (!LITHO_FILTERS.has(soilId)) continue;
+
+      var lon = lons[c];
+      var depth = getDepthAt(lat, lon);
+
+      // Must be ocean (depth > 0), exclude land / above sea level
+      if (!isNaN(depth) && depth > 0) {
+        mask[r * nc + c] = 1;
+        visibleCount++;
+      }
+    }
+  }
+
+  LITHO_MASK = mask;
+  console.log('[LithoMask] ' + visibleCount + '/' + (nr * nc) + ' cells visible, ' +
+    LITHO_FILTERS.size + ' types actifs');
+  return visibleCount;
+}
+
+// ──────────── TOAST / UI HELPERS ────────────
+function T(m, t) {
+  var e = $('tst'), s = $('tSp'), x = $('tMsg');
+  e.className = 'tst';
+  s.style.display = t === 'load' ? 'block' : 'none';
+  if (t === 'ok') e.className = 'tst ok';
+  if (t === 'err') e.className = 'tst err';
+  x.textContent = m;
+  if (t !== 'load') setTimeout(function() { e.className = 'tst hi'; }, 6000);
+}
+function tp() { PO = !PO; $('pnl').className = PO ? 'pnl' : 'pnl shut'; uLP(); if (PO) uDS(); }
+function op() { PO = true; $('pnl').className = 'pnl'; uLP(); }
+function uLP() { $('lgd').className = PO && window.innerWidth > 768 ? 'lgd po' : 'lgd'; }
 
 // ──────────── HISTORY ────────────
-var HIST_KEY='marinedata_history';
-function getHist(){try{return JSON.parse(localStorage.getItem(HIST_KEY))||[]}catch(e){return[]}}
-function saveHist(arr){try{localStorage.setItem(HIST_KEY,JSON.stringify(arr.slice(0,20)))}catch(e){}}
-function addHist(loc,dep,lat,lon,bb){
-  var h=getHist();h=h.filter(function(x){return x.loc!==loc||x.dep!==dep});
-  h.unshift({loc:loc,dep:dep,lat:lat,lon:lon,bb:bb,ts:Date.now()});saveHist(h);renderHist()
+var HIST_KEY = 'marinedata_history';
+function getHist() { try { return JSON.parse(localStorage.getItem(HIST_KEY)) || []; } catch(e) { return []; } }
+function saveHist(arr) { try { localStorage.setItem(HIST_KEY, JSON.stringify(arr.slice(0, 20))); } catch(e) {} }
+function addHist(loc, dep, lat, lon, bb) {
+  var h = getHist(); h = h.filter(function(x) { return x.loc !== loc || x.dep !== dep; });
+  h.unshift({ loc: loc, dep: dep, lat: lat, lon: lon, bb: bb, ts: Date.now() }); saveHist(h); renderHist();
 }
-function delHist(i){var h=getHist();h.splice(i,1);saveHist(h);renderHist()}
-function clearHist(){saveHist([]);renderHist()}
-function toggleHist(){var dd=$('histDd');dd.classList.toggle('show');if(dd.classList.contains('show'))renderHist()}
-function renderHist(){
-  var h=getHist(),ls=$('histLs');
-  if(!h.length){ls.innerHTML='<div class="hist-empty">Aucune recherche récente</div>';return}
-  ls.innerHTML=h.map(function(x,i){
-    return '<div class="hist-it" onclick="goHist('+i+')"><div class="hist-ico">📍</div><div class="hist-info"><div class="hist-name">'+esc(x.loc)+'</div><div class="hist-meta">'+x.dep+'m · '+timeAgo(new Date(x.ts))+'</div></div><button class="hist-del" onclick="event.stopPropagation();delHist('+i+')" title="Supprimer">✕</button></div>'
-  }).join('')
+function delHist(i) { var h = getHist(); h.splice(i, 1); saveHist(h); renderHist(); }
+function clearHist() { saveHist([]); renderHist(); }
+function toggleHist() { var dd = $('histDd'); dd.classList.toggle('show'); if (dd.classList.contains('show')) renderHist(); }
+function renderHist() {
+  var h = getHist(), ls = $('histLs');
+  if (!h.length) { ls.innerHTML = '<div class="hist-empty">Aucune recherche récente</div>'; return; }
+  ls.innerHTML = h.map(function(x, i) {
+    return '<div class="hist-it" onclick="goHist(' + i + ')"><div class="hist-ico">📍</div><div class="hist-info"><div class="hist-name">' + esc(x.loc) + '</div><div class="hist-meta">' + x.dep + 'm · ' + timeAgo(new Date(x.ts)) + '</div></div><button class="hist-del" onclick="event.stopPropagation();delHist(' + i + ')" title="Supprimer">✕</button></div>';
+  }).join('');
 }
-function goHist(i){
-  var h=getHist(),x=h[i];if(!x)return;
-  $('inLoc').value=x.loc;$('inD').value=x.dep;$('histDd').classList.remove('show');
-  if(x.bb){M.fitBounds([[x.bb[0],x.bb[2]],[x.bb[1],x.bb[3]]])}else{M.setView([x.lat,x.lon],10)}
-  if(SR)M.removeLayer(SR);fPorts([x.lat,x.lon],.5);uDS();T('Chargé depuis l\'historique','ok');op()
+function goHist(i) {
+  var h = getHist(), x = h[i]; if (!x) return;
+  $('inLoc').value = x.loc; $('inD').value = x.dep; $('histDd').classList.remove('show');
+  if (x.bb) M.fitBounds([[x.bb[0], x.bb[2]], [x.bb[1], x.bb[3]]]); else M.setView([x.lat, x.lon], 10);
+  if (SR) M.removeLayer(SR); fPorts([x.lat, x.lon], .5); uDS(); T('Chargé depuis l\'historique', 'ok'); op();
 }
-function timeAgo(d){
-  var s=Math.floor((Date.now()-d.getTime())/1000);
-  if(s<60)return 'à l\'instant';if(s<3600)return Math.floor(s/60)+'min';
-  if(s<86400)return Math.floor(s/3600)+'h';if(s<604800)return Math.floor(s/86400)+'j';
-  return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})
+function timeAgo(d) {
+  var s = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (s < 60) return 'à l\'instant'; if (s < 3600) return Math.floor(s / 60) + 'min';
+  if (s < 86400) return Math.floor(s / 3600) + 'h'; if (s < 604800) return Math.floor(s / 86400) + 'j';
+  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
 }
-function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
-document.addEventListener('click',function(e){if(!e.target.closest('.hist-wrap'))$('histDd').classList.remove('show')});
+function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+document.addEventListener('click', function(e) { if (!e.target.closest('.hist-wrap')) $('histDd').classList.remove('show'); });
 
 // ──────────── GRID SELECTION ────────────
-var SEL_ON=false, SEL_STEP=0.05, SEL_CELLS=new Set, selGridLayer=null, selHighLayer=null;
-function selKey(lat,lon){return(Math.floor(lat/SEL_STEP)*SEL_STEP).toFixed(6)+'_'+(Math.floor(lon/SEL_STEP)*SEL_STEP).toFixed(6)}
-function selBounds(key){var p=key.split('_');var la=+p[0],lo=+p[1];return[[la,lo],[la+SEL_STEP,lo+SEL_STEP]]}
-function isInSel(lat,lon){if(!SEL_ON||!SEL_CELLS.size)return true;return SEL_CELLS.has(selKey(lat,lon))}
-function toggleSel(){
-  SEL_ON=!SEL_ON;$('selBtn').className=SEL_ON?'sel-btn on':'sel-btn';
-  $('selBar').className=SEL_ON?'sel-bar':'sel-bar hide';
-  if(SEL_ON){renderSelGrid()}
-  else{if(selGridLayer){M.removeLayer(selGridLayer);selGridLayer=null}}
-  refreshAfterSel()
+var SEL_ON = false, SEL_STEP = 0.05, SEL_CELLS = new Set, selGridLayer = null;
+function selKey(lat, lon) { return (Math.floor(lat / SEL_STEP) * SEL_STEP).toFixed(6) + '_' + (Math.floor(lon / SEL_STEP) * SEL_STEP).toFixed(6); }
+function selBounds(key) { var p = key.split('_'); var la = +p[0], lo = +p[1]; return [[la, lo], [la + SEL_STEP, lo + SEL_STEP]]; }
+function isInSel(lat, lon) { if (!SEL_ON || !SEL_CELLS.size) return true; return SEL_CELLS.has(selKey(lat, lon)); }
+function toggleSel() {
+  SEL_ON = !SEL_ON; $('selBtn').className = SEL_ON ? 'sel-btn on' : 'sel-btn';
+  $('selBar').className = SEL_ON ? 'sel-bar' : 'sel-bar hide';
+  if (SEL_ON) renderSelGrid(); else { if (selGridLayer) { M.removeLayer(selGridLayer); selGridLayer = null; } }
+  refreshAllLayers();
 }
-function setSelStep(v){
-  SEL_STEP=v;SEL_CELLS.clear();$('selCnt').textContent='0';
-  if(SEL_ON)renderSelGrid();renderSelHighlight();refreshAfterSel()
+function setSelStep(v) {
+  SEL_STEP = v; SEL_CELLS.clear(); $('selCnt').textContent = '0';
+  if (SEL_ON) renderSelGrid(); refreshAllLayers();
 }
-function clearSel(){SEL_CELLS.clear();$('selCnt').textContent='0';renderSelHighlight();refreshAfterSel()}
-function renderSelGrid(){
-  if(selGridLayer){M.removeLayer(selGridLayer);selGridLayer=null}
-  if(!SEL_ON)return;
-  var SG=L.GridLayer.extend({createTile:function(coords){
-    var tile=document.createElement('canvas'),sz=this.getTileSize();tile.width=sz.x;tile.height=sz.y;
-    var ctx=tile.getContext('2d');
-    var nw=this._map.unproject([coords.x*sz.x,coords.y*sz.y],coords.z);
-    var se=this._map.unproject([(coords.x+1)*sz.x,(coords.y+1)*sz.y],coords.z);
-    var latN=nw.lat,latS2=se.lat,lonW=nw.lng,lonE=se.lng;
-    var latSpan=latN-latS2,lonSpan=lonE-lonW;
-    if(latSpan<=0||lonSpan<=0)return tile;
-    ctx.strokeStyle='rgba(0,229,255,.2)';ctx.lineWidth=0.5;
-    // horizontal grid lines
-    var startLat=Math.floor(latS2/SEL_STEP)*SEL_STEP;
-    for(var la=startLat;la<=latN+SEL_STEP;la+=SEL_STEP){
-      var py=((latN-la)/latSpan)*sz.y;
-      ctx.beginPath();ctx.moveTo(0,py);ctx.lineTo(sz.x,py);ctx.stroke()
+function clearSel() { SEL_CELLS.clear(); $('selCnt').textContent = '0'; if (SEL_ON) renderSelGrid(); refreshAllLayers(); }
+
+function renderSelGrid() {
+  if (selGridLayer) { M.removeLayer(selGridLayer); selGridLayer = null; }
+  if (!SEL_ON) return;
+  var SG = L.GridLayer.extend({
+    createTile: function(coords) {
+      var tile = document.createElement('canvas'), sz = this.getTileSize();
+      tile.width = sz.x; tile.height = sz.y;
+      var ctx = tile.getContext('2d');
+      var nw = this._map.unproject([coords.x * sz.x, coords.y * sz.y], coords.z);
+      var se = this._map.unproject([(coords.x + 1) * sz.x, (coords.y + 1) * sz.y], coords.z);
+      var latN = nw.lat, latS = se.lat, lonW = nw.lng, lonE = se.lng;
+      var latSpan = latN - latS, lonSpan = lonE - lonW;
+      if (latSpan <= 0 || lonSpan <= 0) return tile;
+      ctx.strokeStyle = 'rgba(0,229,255,.2)'; ctx.lineWidth = 0.5;
+      var startLat = Math.floor(latS / SEL_STEP) * SEL_STEP;
+      for (var la = startLat; la <= latN + SEL_STEP; la += SEL_STEP) {
+        var py = ((latN - la) / latSpan) * sz.y;
+        ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(sz.x, py); ctx.stroke();
+      }
+      var startLon = Math.floor(lonW / SEL_STEP) * SEL_STEP;
+      for (var lo = startLon; lo <= lonE + SEL_STEP; lo += SEL_STEP) {
+        var px = ((lo - lonW) / lonSpan) * sz.x;
+        ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, sz.y); ctx.stroke();
+      }
+      SEL_CELLS.forEach(function(key) {
+        var b = selBounds(key);
+        if (b[1][0] < latS || b[0][0] > latN || b[1][1] < lonW || b[0][1] > lonE) return;
+        var x1 = ((b[0][1] - lonW) / lonSpan) * sz.x, y1 = ((latN - b[1][0]) / latSpan) * sz.y;
+        var x2 = ((b[1][1] - lonW) / lonSpan) * sz.x, y2 = ((latN - b[0][0]) / latSpan) * sz.y;
+        ctx.fillStyle = 'rgba(0,229,255,.15)'; ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
+        ctx.strokeStyle = 'rgba(0,229,255,.6)'; ctx.lineWidth = 1.5; ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+        ctx.strokeStyle = 'rgba(0,229,255,.2)'; ctx.lineWidth = 0.5;
+      });
+      return tile;
     }
-    // vertical grid lines
-    var startLon=Math.floor(lonW/SEL_STEP)*SEL_STEP;
-    for(var lo=startLon;lo<=lonE+SEL_STEP;lo+=SEL_STEP){
-      var px=((lo-lonW)/lonSpan)*sz.x;
-      ctx.beginPath();ctx.moveTo(px,0);ctx.lineTo(px,sz.y);ctx.stroke()
-    }
-    // highlight selected cells
-    SEL_CELLS.forEach(function(key){
-      var b=selBounds(key);
-      var cLatS=b[0][0],cLonW=b[0][1],cLatN=b[1][0],cLonE=b[1][1];
-      if(cLatN<latS2||cLatS>latN||cLonE<lonW||cLonW>lonE)return;
-      var x1=((cLonW-lonW)/lonSpan)*sz.x;
-      var y1=((latN-cLatN)/latSpan)*sz.y;
-      var x2=((cLonE-lonW)/lonSpan)*sz.x;
-      var y2=((latN-cLatS)/latSpan)*sz.y;
-      ctx.fillStyle='rgba(0,229,255,.15)';
-      ctx.fillRect(x1,y1,x2-x1,y2-y1);
-      ctx.strokeStyle='rgba(0,229,255,.6)';ctx.lineWidth=1.5;
-      ctx.strokeRect(x1,y1,x2-x1,y2-y1);
-      ctx.strokeStyle='rgba(0,229,255,.2)';ctx.lineWidth=0.5;
-    });
-    return tile
-  }});
-  selGridLayer=new SG({opacity:1,updateWhenZooming:false,updateWhenIdle:false,zIndex:900}).addTo(M)
-}
-function renderSelHighlight(){if(SEL_ON&&selGridLayer)selGridLayer.redraw()}
-function refreshAfterSel(){
-  if(G)xIso();
-  if(bathyLayer)bathyLayer.redraw();
-  if(currLayer)currLayer.redraw();
-  if(lithoLayer)lithoLayer.redraw();
+  });
+  selGridLayer = new SG({ opacity: 1, updateWhenZooming: false, updateWhenIdle: false, zIndex: 900 }).addTo(M);
 }
 
-var SOIL_COL={0:[180,100,40],1:[230,210,80],2:[70,140,70],3:[160,120,200],4:[210,140,60],5:[200,60,60],6:[60,200,200],7:[140,140,140]};
-var SOIL_FB=[100,100,100];
-var CM=[{d:0,r:180,g:238,b:240},{d:50,r:130,g:215,b:230},{d:100,r:80,g:190,b:220},{d:200,r:45,g:150,b:200},{d:500,r:25,g:100,b:180},{d:1000,r:15,g:60,b:150},{d:2000,r:10,g:35,b:110},{d:3000,r:8,g:20,b:80},{d:5000,r:5,g:12,b:55},{d:11000,r:3,g:5,b:30}];
-var HYCOM_D=[0,2,4,6,8,10,12,15,20,25,30,35,40,45,50,60,70,80,90,100,125,150,200,250,300,350,400,500,600,700,800,900,1000,1250,1500,2000,2500,3000,4000,5000];
-var colorLUT=null;
-
-function $(id){return document.getElementById(id)}
-function tick(){return new Promise(function(r){setTimeout(r,20)})}
-function dC(d){if(d<=0)return null;for(var i=1;i<CM.length;i++){if(d<=CM[i].d){var a=CM[i-1],b=CM[i],t=(d-a.d)/(b.d-a.d);return[a.r+(b.r-a.r)*t|0,a.g+(b.g-a.g)*t|0,a.b+(b.b-a.b)*t|0]}}var l=CM[CM.length-1];return[l.r,l.g,l.b]}
-function gCSS(){return'linear-gradient(90deg,'+CM.slice(0,7).map(function(c,i){return'rgb('+c.r+','+c.g+','+c.b+') '+(i/6*100|0)+'%'}).join(',')+')'}
-function bSearch(arr,val){var lo=0,hi=arr.length-1;if(val<=arr[lo])return lo;if(val>=arr[hi])return hi;while(hi-lo>1){var mid=(lo+hi)>>1;if(arr[mid]<=val)lo=mid;else hi=mid;}return(val-arr[lo])<(arr[hi]-val)?lo:hi}
-function snapD(d){var best=HYCOM_D[0],bd=Math.abs(d-best);for(var i=0;i<HYCOM_D.length;i++){var dd=Math.abs(d-HYCOM_D[i]);if(dd<bd){bd=dd;best=HYCOM_D[i]}}return best}
-function hav(a,b,c,d){var R=6371,x=(c-a)*Math.PI/180,y=(d-b)*Math.PI/180,z=Math.sin(x/2)*Math.sin(x/2)+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(y/2)*Math.sin(y/2);return R*2*Math.atan2(Math.sqrt(z),Math.sqrt(1-z))}
-function buildLUT(mx){var n=Math.min(mx+1,12000);colorLUT=new Uint8Array(n*3);for(var d=0;d<n;d++){var c=dC(d);if(c){colorLUT[d*3]=c[0];colorLUT[d*3+1]=c[1];colorLUT[d*3+2]=c[2]}}}
-function T(m,t){var e=$('tst'),s=$('tSp'),x=$('tMsg');e.className='tst';s.style.display=t==='load'?'block':'none';if(t==='ok')e.className='tst ok';if(t==='err')e.className='tst err';x.textContent=m;if(t!=='load')setTimeout(function(){e.className='tst hi'},6000)}
-function tp(){PO=!PO;$('pnl').className=PO?'pnl':'pnl shut';uLP();if(PO)uDS()}
-function op(){PO=true;$('pnl').className='pnl';uLP()}
-function uLP(){$('lgd').className=PO&&window.innerWidth>768?'lgd po':'lgd'}
+// ──────────── UNIFIED LAYER REFRESH ────────────
+function refreshAllLayers() {
+  if (G) renderIsobaths();
+  if (bathyLayer) bathyLayer.redraw();
+  if (currLayer) currLayer.redraw();
+  if (lithoLayer) lithoLayer.redraw();
+}
 
 // ──────────── MAP ────────────
-var M=L.map('map',{center:[34.85,138.55],zoom:10,zoomControl:false});
-L.control.zoom({position:'bottomleft'}).addTo(M);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{attribution:'© CARTO',maxZoom:19}).addTo(M);
+var M = L.map('map', { center: [34.85, 138.55], zoom: 10, zoomControl: false });
+L.control.zoom({ position: 'bottomleft' }).addTo(M);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '© CARTO', maxZoom: 19 }).addTo(M);
 
 // ──────────── DYNAMIC TOOLTIP ────────────
-var _cttT=0;
-M.on('mousemove',function(ev){
-  var now=Date.now();if(now-_cttT<35)return;_cttT=now;
-  var el=$('ctt'),ll=ev.latlng,has=false;
-  var cE=ev.originalEvent,px=cE.clientX+16,py=cE.clientY-12;
-  var mW=el.offsetWidth||200,mH=el.offsetHeight||60;
-  if(px+mW>window.innerWidth-10)px=cE.clientX-mW-16;
-  if(py+mH>window.innerHeight-10)py=cE.clientY-mH;
-  if(py<10)py=10;
-  el.style.left=px+'px';el.style.top=py+'px';
-  var inSel=isInSel(ll.lat,ll.lng);
-  if(G&&inSel){var r=bSearch(G.la,ll.lat),c=bSearch(G.lo,ll.lng),v=G.flat[r*G.nc+c];
-    if(v&&!isNaN(v)&&v>0){var col=dC(v);$('cttD').textContent=v.toFixed(0)+'m';$('cttD').style.color=col?'rgb('+col[0]+','+col[1]+','+col[2]+')':'var(--accent)';has=true}
-    else{$('cttD').textContent='—';$('cttD').style.color='var(--text2)'}}
-  else{$('cttD').textContent='—';$('cttD').style.color='var(--text2)'}
-  if(LITHO&&inSel){var r2=bSearch(LITHO.lats,ll.lat),c2=bSearch(LITHO.lons,ll.lng),sid=LITHO.grid[r2*LITHO.nc+c2];
-    if(sid!==255){var nm=LITHO.labels[sid]||('Type '+sid),sc=SOIL_COL[sid]||SOIL_FB;$('cttS').textContent=nm;$('cttS').style.color='rgb('+sc[0]+','+sc[1]+','+sc[2]+')';has=true}
-    else{$('cttS').textContent='—';$('cttS').style.color='var(--text2)'}}
-  else{$('cttS').textContent='—';$('cttS').style.color='var(--text2)'}
-  if(CUR&&inSel){var r3=bSearch(CUR.lats,ll.lat),c3=bSearch(CUR.lons,ll.lng),ui=CUR.u[r3*CUR.nc+c3],vi=CUR.v[r3*CUR.nc+c3];
-    if(!isNaN(ui)&&!isNaN(vi)){var spd=Math.sqrt(ui*ui+vi*vi)*100,ang=Math.atan2(vi,ui)*180/Math.PI,dir=ang<0?ang+360:ang;
-      var dirs=['N','NE','E','SE','S','SO','O','NO'];$('cttC').textContent=spd.toFixed(1)+' cm/s '+dirs[Math.round(dir/45)%8];
-      $('cttC').style.color=spd>5?'rgb(40,20,160)':spd>2?'rgb(90,80,190)':'rgb(150,170,230)';has=true}
-    else{$('cttC').textContent='—';$('cttC').style.color='var(--text2)'}}
-  else{$('cttC').textContent='—';$('cttC').style.color='var(--text2)'}
-  $('cttCo').textContent=ll.lat.toFixed(5)+'°N, '+ll.lng.toFixed(5)+'°E';
-  el.classList.toggle('vis',has)
+var _tooltipThrottle = 0;
+M.on('mousemove', function(ev) {
+  var now = Date.now(); if (now - _tooltipThrottle < 35) return; _tooltipThrottle = now;
+  var el = $('ctt'), ll = ev.latlng, hasData = false;
+  var cE = ev.originalEvent, px = cE.clientX + 16, py = cE.clientY - 12;
+  var mW = el.offsetWidth || 200, mH = el.offsetHeight || 60;
+  if (px + mW > window.innerWidth - 10) px = cE.clientX - mW - 16;
+  if (py + mH > window.innerHeight - 10) py = cE.clientY - mH;
+  if (py < 10) py = 10;
+  el.style.left = px + 'px'; el.style.top = py + 'px';
+
+  var inSel = isInSel(ll.lat, ll.lng);
+
+  // ── Depth tooltip ──
+  if (G && inSel) {
+    var depth = getDepthAt(ll.lat, ll.lng);
+    if (!isNaN(depth) && depth > 0) {
+      var col = depthColor(depth);
+      $('cttD').textContent = depth.toFixed(0) + 'm';
+      $('cttD').style.color = col ? 'rgb(' + col[0] + ',' + col[1] + ',' + col[2] + ')' : 'var(--accent)';
+      hasData = true;
+    } else { $('cttD').textContent = '—'; $('cttD').style.color = 'var(--text2)'; }
+  } else { $('cttD').textContent = '—'; $('cttD').style.color = 'var(--text2)'; }
+
+  // ── Litho tooltip (uses pre-computed mask) ──
+  if (LITHO && LITHO_MASK && inSel) {
+    var lr = bSearch(LITHO.lats, ll.lat), lc = bSearch(LITHO.lons, ll.lng);
+    var idx = lr * LITHO.nc + lc;
+    var sid = LITHO.grid[idx];
+    if (sid !== 255 && LITHO_MASK[idx] === 1) {
+      var nm = LITHO.labels[sid] || ('Type ' + sid);
+      var sc = SOIL_COL[sid] || SOIL_FB;
+      $('cttS').textContent = nm; $('cttS').style.color = 'rgb(' + sc[0] + ',' + sc[1] + ',' + sc[2] + ')';
+      hasData = true;
+    } else { $('cttS').textContent = '—'; $('cttS').style.color = 'var(--text2)'; }
+  } else { $('cttS').textContent = '—'; $('cttS').style.color = 'var(--text2)'; }
+
+  // ── Current tooltip ──
+  if (CUR && inSel) {
+    var cr = bSearch(CUR.lats, ll.lat), cc = bSearch(CUR.lons, ll.lng);
+    var ui = CUR.u[cr * CUR.nc + cc], vi = CUR.v[cr * CUR.nc + cc];
+    if (!isNaN(ui) && !isNaN(vi)) {
+      var spd = Math.sqrt(ui * ui + vi * vi) * 100;
+      var ang = Math.atan2(vi, ui) * 180 / Math.PI; if (ang < 0) ang += 360;
+      var dirs = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
+      $('cttC').textContent = spd.toFixed(1) + ' cm/s ' + dirs[Math.round(ang / 45) % 8];
+      $('cttC').style.color = spd > 5 ? 'rgb(40,20,160)' : spd > 2 ? 'rgb(90,80,190)' : 'rgb(150,170,230)';
+      hasData = true;
+    } else { $('cttC').textContent = '—'; $('cttC').style.color = 'var(--text2)'; }
+  } else { $('cttC').textContent = '—'; $('cttC').style.color = 'var(--text2)'; }
+
+  $('cttCo').textContent = ll.lat.toFixed(5) + '°N, ' + ll.lng.toFixed(5) + '°E';
+  el.classList.toggle('vis', hasData);
 });
-M.on('mouseout',function(){$('ctt').classList.remove('vis')});
-M.on('movestart',function(){$('ctt').classList.remove('vis')});
+M.on('mouseout', function() { $('ctt').classList.remove('vis'); });
+M.on('movestart', function() { $('ctt').classList.remove('vis'); });
 
 // ──────────── GEOCODE ────────────
-function go(){
-  var loc=$('inLoc').value.trim();if(!loc)return T('Entrez un lieu','err');
-  T('Géocodage...','load');$('btnGo').disabled=true;
-  fetch('https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(loc)+'&format=json&limit=1')
-  .then(function(r){return r.json()}).then(function(d){
-    if(!d.length){T('Non trouvé','err');$('btnGo').disabled=false;return}
-    var lat=+d[0].lat,lon=+d[0].lon,bb=d[0].boundingbox.map(Number);
-    var dLa=Math.max(bb[1]-bb[0],.4)*.7,dLo=Math.max(bb[3]-bb[2],.4)*.7;
-    M.fitBounds([[lat-dLa,lon-dLo],[lat+dLa,lon+dLo]]);
-    if(SR)M.removeLayer(SR);
-    SR=L.rectangle([[lat-dLa,lon-dLo],[lat+dLa,lon+dLo]],{color:'#00e5ff',weight:1,fillOpacity:.03,dashArray:'6,4'}).addTo(M);
-    addHist(loc,+$('inD').value,lat,lon,[lat-dLa,lat+dLa,lon-dLo,lon+dLo]);
-    fPorts([lat,lon],Math.max(dLa,dLo));
-    uDS();T('Zone OK — panneau → données','ok');op();$('btnGo').disabled=false;
-  }).catch(function(e){T(e.message,'err');$('btnGo').disabled=false})
+function go() {
+  var loc = $('inLoc').value.trim(); if (!loc) return T('Entrez un lieu', 'err');
+  T('Géocodage...', 'load'); $('btnGo').disabled = true;
+  fetch('https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(loc) + '&format=json&limit=1')
+    .then(function(r) { return r.json(); }).then(function(d) {
+      if (!d.length) { T('Non trouvé', 'err'); $('btnGo').disabled = false; return; }
+      var lat = +d[0].lat, lon = +d[0].lon, bb = d[0].boundingbox.map(Number);
+      var dLa = Math.max(bb[1] - bb[0], .4) * .7, dLo = Math.max(bb[3] - bb[2], .4) * .7;
+      M.fitBounds([[lat - dLa, lon - dLo], [lat + dLa, lon + dLo]]);
+      if (SR) M.removeLayer(SR);
+      SR = L.rectangle([[lat - dLa, lon - dLo], [lat + dLa, lon + dLo]], { color: '#00e5ff', weight: 1, fillOpacity: .03, dashArray: '6,4' }).addTo(M);
+      addHist(loc, +$('inD').value, lat, lon, [lat - dLa, lat + dLa, lon - dLo, lon + dLo]);
+      fPorts([lat, lon], Math.max(dLa, dLo));
+      uDS(); T('Zone OK — panneau → données', 'ok'); op(); $('btnGo').disabled = false;
+    }).catch(function(e) { T(e.message, 'err'); $('btnGo').disabled = false; });
 }
-M.on('moveend',function(){if(PO)uDS()});
+M.on('moveend', function() { if (PO) uDS(); });
 
 // ──────────── DATASET LINKS ────────────
-function uDS(){
-  var b=M.getBounds(),s=b.getSouth().toFixed(2),n=b.getNorth().toFixed(2),w=b.getWest().toFixed(2),e=b.getEast().toFixed(2);
-  var cs='Nord:'+n+'° Sud:'+s+'° Ouest:'+w+'° Est:'+e+'°';
-  var eu='https://coastwatch.pfeg.noaa.gov/erddap/griddap/etopo180.csv?altitude[('+s+'):('+n+')][('+w+'):('+e+')]';
-  $('dsA').innerHTML='<div class="ds-card"><h4>🌊 GEBCO <span class="badge" style="background:var(--green);color:var(--bg)">~450m</span></h4><ol class="ds-steps"><li>Ouvrez GEBCO Download</li><li>Coordonnées :</li></ol><div class="cb" onclick="cpy(this,\''+cs+'\')">'+cs+'<span class="ch">copier</span></div><ol class="ds-steps" start="3"><li>Format <b>Esri ASCII</b></li></ol><a class="ds-link" href="https://download.gebco.net/" target="_blank">🔗 GEBCO</a></div><div class="ds-card"><h4>🛰 NOAA ERDDAP <span class="badge" style="background:var(--accent);color:var(--bg)">~1.8km</span></h4><a class="ds-link" href="'+eu+'" target="_blank" download="etopo.csv">⬇ CSV direct</a></div>';
-  uDSC()
+function uDS() {
+  var b = M.getBounds(), s = b.getSouth().toFixed(2), n = b.getNorth().toFixed(2), w = b.getWest().toFixed(2), e = b.getEast().toFixed(2);
+  var cs = 'Nord:' + n + '° Sud:' + s + '° Ouest:' + w + '° Est:' + e + '°';
+  var eu = 'https://coastwatch.pfeg.noaa.gov/erddap/griddap/etopo180.csv?altitude[(' + s + '):(' + n + ')][(' + w + '):(' + e + ')]';
+  $('dsA').innerHTML = '<div class="ds-card"><h4>🌊 GEBCO <span class="badge" style="background:var(--green);color:var(--bg)">~450m</span></h4><ol class="ds-steps"><li>Ouvrez GEBCO Download</li><li>Coordonnées :</li></ol><div class="cb" onclick="cpy(this,\'' + cs + '\')">' + cs + '<span class="ch">copier</span></div><ol class="ds-steps" start="3"><li>Format <b>Esri ASCII</b></li></ol><a class="ds-link" href="https://download.gebco.net/" target="_blank">🔗 GEBCO</a></div><div class="ds-card"><h4>🛰 NOAA ERDDAP <span class="badge" style="background:var(--accent);color:var(--bg)">~1.8km</span></h4><a class="ds-link" href="' + eu + '" target="_blank" download="etopo.csv">⬇ CSV direct</a></div>';
+  uDSC();
 }
-function uDSC(){
-  var dep=+$('inD').value||651,hDep=snapD(dep);
-  var latS,latN,lonW,lonE,src;
-  if(G){latS=G.la[0];latN=G.la[G.nr-1];lonW=G.lo[0];lonE=G.lo[G.nc-1];src='fichier chargé'}
-  else{var b=M.getBounds();latS=b.getSouth();latN=b.getNorth();lonW=b.getWest();lonE=b.getEast();src='vue carte'}
-  var hw=lonW<0?lonW+360:lonW,he=lonE<0?lonE+360:lonE;
-  var hyU='https://www.ncei.noaa.gov/erddap/griddap/HYCOM_reg6_latest3d.csv?water_u[(last)][('+hDep+'.0)][('+latS.toFixed(2)+'):('+latN.toFixed(2)+')][('+hw.toFixed(2)+'):('+he.toFixed(2)+')],water_v[(last)][('+hDep+'.0)][('+latS.toFixed(2)+'):('+latN.toFixed(2)+')][('+hw.toFixed(2)+'):('+he.toFixed(2)+')]';
-  var note=hDep!==dep?' (ajusté '+dep+'→'+hDep+'m)':'';
-  $('dsC').innerHTML='<div class="ds-card"><h4>🌊 HYCOM <span class="badge" style="background:#8b5cf6;color:#fff">'+hDep+'m'+note+'</span></h4><p>Source: '+src+'</p><a class="ds-link" href="'+hyU+'" target="_blank" download="hycom_'+hDep+'m.csv">⬇ CSV</a></div>'
+function uDSC() {
+  var dep = +$('inD').value || 651, hDep = snapToHYCOM(dep);
+  var latS, latN, lonW, lonE, src;
+  if (G) { latS = G.la[0]; latN = G.la[G.nr - 1]; lonW = G.lo[0]; lonE = G.lo[G.nc - 1]; src = 'fichier chargé'; }
+  else { var b = M.getBounds(); latS = b.getSouth(); latN = b.getNorth(); lonW = b.getWest(); lonE = b.getEast(); src = 'vue carte'; }
+  var hw = lonW < 0 ? lonW + 360 : lonW, he = lonE < 0 ? lonE + 360 : lonE;
+  var hyU = 'https://www.ncei.noaa.gov/erddap/griddap/HYCOM_reg6_latest3d.csv?water_u[(last)][(' + hDep + '.0)][(' + latS.toFixed(2) + '):(' + latN.toFixed(2) + ')][(' + hw.toFixed(2) + '):(' + he.toFixed(2) + ')],water_v[(last)][(' + hDep + '.0)][(' + latS.toFixed(2) + '):(' + latN.toFixed(2) + ')][(' + hw.toFixed(2) + '):(' + he.toFixed(2) + ')]';
+  var note = hDep !== dep ? ' (ajusté ' + dep + '→' + hDep + 'm)' : '';
+  $('dsC').innerHTML = '<div class="ds-card"><h4>🌊 HYCOM <span class="badge" style="background:#8b5cf6;color:#fff">' + hDep + 'm' + note + '</span></h4><p>Source: ' + src + '</p><a class="ds-link" href="' + hyU + '" target="_blank" download="hycom_' + hDep + 'm.csv">⬇ CSV</a></div>';
 }
-function cpy(el,t){navigator.clipboard.writeText(t).then(function(){el.className='cb cp';setTimeout(function(){el.className='cb'},2000);T('Copié','ok')}).catch(function(){})}
+function cpy(el, t) { navigator.clipboard.writeText(t).then(function() { el.className = 'cb cp'; setTimeout(function() { el.className = 'cb'; }, 2000); T('Copié', 'ok'); }).catch(function() {}); }
 
 // ──────────── PORTS ────────────
-function fPorts(c,s){
-  PM.forEach(function(m){M.removeLayer(m)});PM=[];
-  var rad=Math.max(s,.5)*111000;
-  fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:'data='+encodeURIComponent('[out:json][timeout:12];(node["seamark:type"="harbour"](around:'+rad+','+c[0]+','+c[1]+');node["leisure"="marina"](around:'+rad+','+c[0]+','+c[1]+');node["harbour"](around:'+rad+','+c[0]+','+c[1]+'););out center 30;')})
-  .then(function(r){return r.json()}).then(function(d){
-    d.elements.forEach(function(el){
-      var lt=el.lat||el.center&&el.center.lat,ln=el.lon||el.center&&el.center.lon;if(!lt)return;
-      var nm=el.tags&&(el.tags.name||el.tags['seamark:name'])||'Port';
-      PM.push(L.marker([lt,ln],{icon:L.divIcon({html:'<div style="background:#ffc644;width:9px;height:9px;border-radius:50%;border:2px solid #fff"></div>',className:'',iconSize:[13,13],iconAnchor:[6,6]})}).bindPopup('<b>⚓ '+nm+'</b><br>'+lt.toFixed(4)+'°N, '+ln.toFixed(4)+'°E').addTo(M))
-    })
-  }).catch(function(){})
+function fPorts(c, s) {
+  PM.forEach(function(m) { M.removeLayer(m); }); PM = [];
+  var rad = Math.max(s, .5) * 111000;
+  fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: 'data=' + encodeURIComponent('[out:json][timeout:12];(node["seamark:type"="harbour"](around:' + rad + ',' + c[0] + ',' + c[1] + ');node["leisure"="marina"](around:' + rad + ',' + c[0] + ',' + c[1] + ');node["harbour"](around:' + rad + ',' + c[0] + ',' + c[1] + '););out center 30;') })
+    .then(function(r) { return r.json(); }).then(function(d) {
+      d.elements.forEach(function(el) {
+        var lt = el.lat || el.center && el.center.lat, ln = el.lon || el.center && el.center.lon; if (!lt) return;
+        var nm = el.tags && (el.tags.name || el.tags['seamark:name']) || 'Port';
+        PM.push(L.marker([lt, ln], { icon: L.divIcon({ html: '<div style="background:#ffc644;width:9px;height:9px;border-radius:50%;border:2px solid #fff"></div>', className: '', iconSize: [13, 13], iconAnchor: [6, 6] }) }).bindPopup('<b>⚓ ' + nm + '</b><br>' + lt.toFixed(4) + '°N, ' + ln.toFixed(4) + '°E').addTo(M));
+      });
+    }).catch(function() {});
 }
 
 // ──────────── FILE DROP HANDLERS ────────────
-function setupDrop(dzId,fInId,handler){
-  var dz=$(dzId),fi=$(fInId);if(!dz||!fi)return;
-  dz.onclick=function(){fi.click()};
-  dz.ondragover=function(e){e.preventDefault();dz.classList.add('ov')};
-  dz.ondragleave=function(){dz.classList.remove('ov')};
-  dz.ondrop=function(e){e.preventDefault();dz.classList.remove('ov');if(e.dataTransfer.files.length)handler(e.dataTransfer.files[0])};
-  fi.onchange=function(e){if(e.target.files.length)handler(e.target.files[0])};
+function setupDrop(dzId, fInId, handler) {
+  var dz = $(dzId), fi = $(fInId); if (!dz || !fi) return;
+  dz.onclick = function() { fi.click(); };
+  dz.ondragover = function(e) { e.preventDefault(); dz.classList.add('ov'); };
+  dz.ondragleave = function() { dz.classList.remove('ov'); };
+  dz.ondrop = function(e) { e.preventDefault(); dz.classList.remove('ov'); if (e.dataTransfer.files.length) handler(e.dataTransfer.files[0]); };
+  fi.onchange = function(e) { if (e.target.files.length) handler(e.target.files[0]); };
 }
-setupDrop('dz','fIn',loadBathy);
-setupDrop('dzC','fInC',loadCurr);
-setupDrop('dzL','fInL',loadLitho);
+setupDrop('dz', 'fIn', loadBathy);
+setupDrop('dzC', 'fInC', loadCurr);
+setupDrop('dzL', 'fInL', loadLitho);
 
-// ──────────── BATHYMETRY ────────────
-async function loadBathy(f){
-  T('Lecture ('+((f.size/1e6)|0)+' Mo)...','load');await tick();
-  try{
-    var t=await f.text();T('Parsing...','load');await tick();
-    if(f.name.toLowerCase().endsWith('.asc'))await parseASC(t);else await parseCSVBathy(t);
-    T('Rendu...','load');await tick();rBathy();xIso();uDSC();
-    if(LITHO)renderLitho();
-  }catch(e){T('Erreur: '+e.message,'err');console.error(e)}
+// ══════════════════════════════════════════
+//  BATHYMETRY — Parse, normalize, render
+// ══════════════════════════════════════════
+
+async function loadBathy(f) {
+  T('Lecture (' + ((f.size / 1e6) | 0) + ' Mo)...', 'load'); await tick();
+  try {
+    var t = await f.text(); T('Parsing...', 'load'); await tick();
+    if (f.name.toLowerCase().endsWith('.asc')) await parseASC(t); else await parseCSVBathy(t);
+    // CRITICAL: normalize grid to ascending lat/lon order
+    normalizeGrid(G);
+    T('Rendu...', 'load'); await tick();
+    renderBathy(); renderIsobaths(); uDSC();
+    // Re-render litho if it was already loaded
+    if (LITHO) { computeLithoMask(); renderLitho(); }
+  } catch (e) { T('Erreur: ' + e.message, 'err'); console.error(e); }
 }
 
-async function parseASC(t){
-  var hdr={},dataStart=0,fl=t.substring(0,2000).split('\n');
-  for(var i=0;i<Math.min(10,fl.length);i++){var p=fl[i].trim().split(/\s+/);if(p.length===2&&isNaN(+p[0])){hdr[p[0].toLowerCase()]=+p[1];dataStart+=fl[i].length+1}else break}
-  var nc=hdr.ncols|0,nr=hdr.nrows|0,x0=hdr.xllcorner!=null?hdr.xllcorner:hdr.xllcenter,y0=hdr.yllcorner!=null?hdr.yllcorner:hdr.yllcenter,cs=hdr.cellsize,nd=hdr.nodata_value!=null?hdr.nodata_value:-9999;
-  if(!nc||!nr||x0==null||y0==null||!cs)throw new Error('ASC invalide');
-  var stride=1;while(Math.ceil(nr/stride)*Math.ceil(nc/stride)>MAX_CELLS)stride++;
-  var gnr=Math.ceil(nr/stride),gnc=Math.ceil(nc/stride);
-  T('ASC '+nr+'×'+nc+' stride='+stride+' → '+gnr+'×'+gnc,'load');await tick();
-  var gr=new Float32Array(gnr*gnc).fill(NaN),gla=new Float64Array(gnr),glo=new Float64Array(gnc);
-  for(i=0;i<gnr;i++)gla[i]=y0+(nr-1-i*stride)*cs;
-  for(i=0;i<gnc;i++)glo[i]=x0+i*stride*cs;
-  var pos=dataStart,row=0,gridRow=0,lp=-1;
-  while(pos<t.length&&row<nr){
-    if(row%stride!==0){while(pos<t.length&&t.charCodeAt(pos)!==10)pos++;pos++;row++;continue}
-    var col=0,gridCol=0;
-    while(pos<t.length&&t.charCodeAt(pos)!==10){
-      while(pos<t.length){var ch=t.charCodeAt(pos);if(ch===32||ch===9||ch===13)pos++;else break}
-      if(pos>=t.length||t.charCodeAt(pos)===10)break;
-      var ns=pos;while(pos<t.length){ch=t.charCodeAt(pos);if(ch===32||ch===9||ch===10||ch===13)break;pos++}
-      if(col%stride===0&&gridCol<gnc){var v=+t.substring(ns,pos);if(v!==nd&&!isNaN(v)&&v<0)gr[gridRow*gnc+gridCol]=-v;gridCol++}
-      col++
-    }
-    if(pos<t.length)pos++;gridRow++;row++;
-    var pct=row/nr*100|0;if(pct%5===0&&pct!==lp){lp=pct;T('ASC '+pct+'%','load');await tick()}
+async function parseASC(t) {
+  var hdr = {}, dataStart = 0, fl = t.substring(0, 2000).split('\n');
+  for (var i = 0; i < Math.min(10, fl.length); i++) {
+    var p = fl[i].trim().split(/\s+/);
+    if (p.length === 2 && isNaN(+p[0])) { hdr[p[0].toLowerCase()] = +p[1]; dataStart += fl[i].length + 1; }
+    else break;
   }
-  G={la:gla,lo:glo,nr:gnr,nc:gnc,flat:gr};T(gnr+'×'+gnc+' chargé','ok')
-}
+  var nc = hdr.ncols | 0, nr = hdr.nrows | 0;
+  var x0 = hdr.xllcorner != null ? hdr.xllcorner : hdr.xllcenter;
+  var y0 = hdr.yllcorner != null ? hdr.yllcorner : hdr.yllcenter;
+  var cs = hdr.cellsize, nd = hdr.nodata_value != null ? hdr.nodata_value : -9999;
+  if (!nc || !nr || x0 == null || y0 == null || !cs) throw new Error('ASC invalide');
 
-async function parseCSVBathy(t){
-  var ls=t.split('\n'),sr=0;
-  if(ls[0]&&/[a-zA-Z]/.test(ls[0])){sr=1;if(ls[1]&&/[a-zA-Z]/.test(ls[1]))sr=2}
-  var stride=1;while(Math.ceil((ls.length-sr)/stride)>MAX_CELLS)stride++;
-  T('CSV stride='+stride,'load');await tick();
-  var latS=new Set,lonS=new Set,raw=[];
-  for(var i=sr;i<ls.length;i+=stride){
-    var p=ls[i].split(/[,;\t\s]+/);if(p.length<3)continue;
-    var a=+p[0],b=+p[1],val=+p[2];if(!isFinite(a)||!isFinite(b)||!isFinite(val))continue;
-    var la,lo;if(Math.abs(a)<=90&&Math.abs(b)>90){la=a;lo=b}else{la=b;lo=a}
-    if(val>=0)continue;raw.push(la,lo,-val);latS.add(la);lonS.add(lo);
-    if(i%50000===0){T('CSV '+((i/ls.length*100)|0)+'%','load');await tick()}
-  }
-  if(!raw.length)throw new Error('Aucun point sous-marin');
-  var sla=[...latS].sort(function(a,b){return a-b}),slo=[...lonS].sort(function(a,b){return a-b});
-  var gnr=sla.length,gnc=slo.length;
-  var laI=new Map,loI=new Map;sla.forEach(function(v,i){laI.set(v,i)});slo.forEach(function(v,i){loI.set(v,i)});
-  var flat=new Float32Array(gnr*gnc).fill(NaN);
-  for(i=0;i<raw.length;i+=3){var ri=laI.get(raw[i]),ci=loI.get(raw[i+1]);if(ri!=null&&ci!=null)flat[ri*gnc+ci]=raw[i+2]}
-  G={la:new Float64Array(sla),lo:new Float64Array(slo),nr:gnr,nc:gnc,flat:flat};T(gnr+'×'+gnc+' chargé','ok')
-}
+  var stride = 1;
+  while (Math.ceil(nr / stride) * Math.ceil(nc / stride) > MAX_CELLS) stride++;
+  var gnr = Math.ceil(nr / stride), gnc = Math.ceil(nc / stride);
+  T('ASC ' + nr + '×' + nc + ' stride=' + stride + ' → ' + gnr + '×' + gnc, 'load'); await tick();
 
-// ──────────── BATHY RENDERER (tile) ────────────
-function rBathy(){
-  if(!G)return;if(bathyLayer){M.removeLayer(bathyLayer);bathyLayer=null}
-  var maxD=0,flat=G.flat;for(var i=0;i<flat.length;i++){if(flat[i]>maxD)maxD=flat[i]}
-  buildLUT(Math.ceil(maxD));
-  var la=G.la,lo=G.lo,nr=G.nr,nc=G.nc;
-  var BG=L.GridLayer.extend({createTile:function(coords){
-    var tile=document.createElement('canvas'),sz=this.getTileSize();tile.width=sz.x;tile.height=sz.y;
-    var ctx=tile.getContext('2d'),img=ctx.createImageData(sz.x,sz.y);
-    var nw=this._map.unproject([coords.x*sz.x,coords.y*sz.y],coords.z);
-    var se=this._map.unproject([(coords.x+1)*sz.x,(coords.y+1)*sz.y],coords.z);
-    var latN=nw.lat,latS=se.lat,lonW=nw.lng,lonE=se.lng;
-    var r0=bSearch(la,latS),r1=bSearch(la,latN),c0=bSearch(lo,lonW),c1=bSearch(lo,lonE);
-    var rMin=Math.min(r0,r1),rMax=Math.max(r0,r1),cMin=Math.min(c0,c1),cMax=Math.max(c0,c1);
-    if(rMax<=rMin||cMax<=cMin){ctx.putImageData(img,0,0);return tile}
-    for(var r=rMin;r<=rMax;r++){var lat=la[r],py=Math.round((latN-lat)/(latN-latS)*sz.y);if(py<0||py>=sz.y)continue;
-    for(var c=cMin;c<=cMax;c++){var v=flat[r*nc+c];if(isNaN(v)||v<=0)continue;if(!isInSel(lat,lo[c]))continue;var lon=lo[c],px=Math.round((lon-lonW)/(lonE-lonW)*sz.x);if(px<0||px>=sz.x)continue;
-    var di=v|0,idx=(py*sz.x+px)*4;if(di*3<colorLUT.length){img.data[idx]=colorLUT[di*3];img.data[idx+1]=colorLUT[di*3+1];img.data[idx+2]=colorLUT[di*3+2]}img.data[idx+3]=110}}
-    ctx.putImageData(img,0,0);return tile
-  }});
-  bathyLayer=new BG({opacity:.6,updateWhenZooming:false,updateWhenIdle:true}).addTo(M);
-  bathyLayer.bringToBack();
-  $('dLeg').style.display='block';$('dBar').style.background=gCSS();
-  $('dL0').textContent='0m';$('dL1').textContent=(maxD/2|0)+'m';$('dL2').textContent=(maxD|0)+'m';
-  $('lgT').textContent='Isobathe '+(+$('inD').value)+'m';$('lgd').style.display='block';uLP()
-}
-function setOp(v){if(bathyLayer)bathyLayer.setOpacity(v/100)}
+  var gr = new Float32Array(gnr * gnc).fill(NaN);
+  var gla = new Float64Array(gnr), glo = new Float64Array(gnc);
+  for (i = 0; i < gnr; i++) gla[i] = y0 + (nr - 1 - i * stride) * cs;
+  for (i = 0; i < gnc; i++) glo[i] = x0 + i * stride * cs;
 
-// ──────────── MARCHING SQUARES ────────────
-function mS(th){
-  if(!G)return[];var la=G.la,lo=G.lo,nr=G.nr,nc=G.nc,flat=G.flat,sg=[];
-  for(var r=0;r<nr-1;r++)for(var c=0;c<nc-1;c++){
-    var bl=flat[r*nc+c],br=flat[r*nc+c+1],tl=flat[(r+1)*nc+c],tr=flat[(r+1)*nc+c+1];
-    if(isNaN(tl)||isNaN(tr)||isNaN(br)||isNaN(bl))continue;
-    var cs=0;if(tl>=th)cs|=8;if(tr>=th)cs|=4;if(br>=th)cs|=2;if(bl>=th)cs|=1;if(!cs||cs===15)continue;
-    var yB=la[r],yT=la[r+1],xL=lo[c],xR=lo[c+1];
-    function lp(v1,v2,c1,c2){return Math.abs(v1-v2)<.001?(c1+c2)/2:c1+(th-v1)/(v2-v1)*(c2-c1)}
-    var TT=[yT,lp(tl,tr,xL,xR)],B=[yB,lp(bl,br,xL,xR)],Le=[lp(bl,tl,yB,yT),xL],R=[lp(br,tr,yB,yT),xR];
-    switch(cs){case 1:case 14:sg.push([Le,B]);break;case 2:case 13:sg.push([B,R]);break;case 3:case 12:sg.push([Le,R]);break;case 4:case 11:sg.push([TT,R]);break;case 5:sg.push([Le,TT],[B,R]);break;case 6:case 9:sg.push([TT,B]);break;case 7:case 8:sg.push([Le,TT]);break;case 10:sg.push([Le,B],[TT,R]);break}
-  }return sg
-}
-
-// ──────────── ISOBATH EXTRACT ────────────
-function xIso(){
-  if(!G)return;var dep=+$('inD').value;
-  if(IL)M.removeLayer(IL);IL=L.layerGroup().addTo(M);
-  var sg=mS(dep);
-  sg.forEach(function(s){
-    var midLat=(s[0][0]+s[1][0])/2,midLon=(s[0][1]+s[1][1])/2;
-    if(!isInSel(midLat,midLon))return;
-    L.polyline(s,{color:'#ff3d71',weight:3.5,opacity:1}).addTo(IL)
-  });
-  var ctr=M.getCenter();
-  [50,100,200,500,1000,1500,2000,3000,5000].forEach(function(d){
-    if(d===dep)return;var rs=mS(d);if(!rs.length)return;
-    rs.forEach(function(s){
-      var mLat=(s[0][0]+s[1][0])/2,mLon=(s[0][1]+s[1][1])/2;
-      if(!isInSel(mLat,mLon))return;
-      L.polyline(s,{color:'rgba(255,255,255,.3)',weight:1,dashArray:'3,5'}).addTo(IL)
-    });
-    var best=rs[0],bd=1e9;rs.forEach(function(s){var dd=Math.abs((s[0][0]+s[1][0])/2-ctr.lat)+Math.abs((s[0][1]+s[1][1])/2-ctr.lng);if(dd<bd){bd=dd;best=s}});
-    L.marker([(best[0][0]+best[1][0])/2,(best[0][1]+best[1][1])/2],{icon:L.divIcon({html:'<div style="font:500 9px DM Mono,monospace;color:rgba(255,255,255,.55);text-shadow:0 0 4px #000">'+d+'m</div>',className:'',iconSize:[40,14],iconAnchor:[20,7]})}).addTo(IL)
-  });
-  sRes(dep,sg);T('Isobathe '+dep+'m : '+sg.length+' segments','ok')
-}
-
-function sRes(dep,sg){
-  if(!sg.length){$('rA').innerHTML='<p style="color:var(--accent2);font-size:12px;margin-top:12px">Aucune isobathe.</p>';return}
-  var allLa=[],allLo=[];sg.forEach(function(s){allLa.push(s[0][0],s[1][0]);allLo.push(s[0][1],s[1][1])});
-  var laMin=Math.min.apply(null,allLa),laMax=Math.max.apply(null,allLa),loMin=Math.min.apply(null,allLo),loMax=Math.max.apply(null,allLo);
-  var cLa=(laMin+laMax)/2,cLo=(loMin+loMax)/2;
-  var h='<div class="sec">Isobathe '+dep+'m</div><div class="st"><span class="sl">Segments</span><span class="sv">'+sg.length+'</span></div><div class="st"><span class="sl">Lat</span><span class="sv">'+laMin.toFixed(4)+'° → '+laMax.toFixed(4)+'°</span></div><div class="st"><span class="sl">Lon</span><span class="sv">'+loMin.toFixed(4)+'° → '+loMax.toFixed(4)+'°</span></div>';
-  if(PM.length){h+='<div class="sec">Ports</div>';
-  PM.map(function(m){var ll=m.getLatLng(),nm=(m.getPopup().getContent().match(/<b>⚓ (.+?)<\/b>/)||[])[1]||'Port';return{name:nm,lat:ll.lat,lon:ll.lng,dist:hav(ll.lat,ll.lng,cLa,cLo)}}).sort(function(a,b){return a.dist-b.dist}).slice(0,6).forEach(function(p){h+='<div class="pc" onclick="M.setView(['+p.lat+','+p.lon+'],13)"><div class="pn">⚓ '+p.name+'</div><div class="pd">'+p.dist.toFixed(1)+'km</div></div>'})}
-  h+='<div class="sec">Export</div><div class="er"><button class="btn" onclick="eCSV()">CSV</button><button class="btn" onclick="eGJ()">GeoJSON</button></div>';$('rA').innerHTML=h
-}
-
-// ──────────── CURRENTS ────────────
-async function loadCurr(f){
-  T('Courants...','load');await tick();
-  try{var t=await f.text();parseCurrCSV(t);renderCurr();T(CUR.nr+'×'+CUR.nc+' vecteurs','ok')}catch(e){T('Erreur: '+e.message,'err')}
-}
-function parseCurrCSV(t){
-  var ls=t.split('\n'),sr=0;if(ls[0]&&/[a-zA-Z]/.test(ls[0])){sr=1;if(ls[1]&&/[a-zA-Z]/.test(ls[1]))sr=2}
-  var latS=new Set,lonS=new Set,raw=[];
-  for(var i=sr;i<ls.length;i++){
-    var p=ls[i].split(/[,;\t]+/);var lat,lon,u,v;
-    if(p.length>=6){lat=+p[2];lon=+p[3];u=+p[4];v=+p[5]}else if(p.length>=4){lat=+p[0];lon=+p[1];u=+p[2];v=+p[3]}else continue;
-    if(!isFinite(lat)||!isFinite(lon)||!isFinite(u)||!isFinite(v)||isNaN(u)||isNaN(v))continue;
-    if(lon>180)lon-=360;latS.add(lat);lonS.add(lon);raw.push(lat,lon,u,v)
-  }
-  if(!raw.length)throw new Error('Aucune donnée');
-  var la=[...latS].sort(function(a,b){return a-b}),lo=[...lonS].sort(function(a,b){return a-b});
-  var nr=la.length,nc=lo.length,laI=new Map,loI=new Map;
-  la.forEach(function(v,i){laI.set(v,i)});lo.forEach(function(v,i){loI.set(v,i)});
-  var uA=new Float32Array(nr*nc).fill(NaN),vA=new Float32Array(nr*nc).fill(NaN);
-  for(i=0;i<raw.length;i+=4){var ri=laI.get(raw[i]),ci=loI.get(raw[i+1]);if(ri!=null&&ci!=null){uA[ri*nc+ci]=raw[i+2];vA[ri*nc+ci]=raw[i+3]}}
-  CUR={lats:new Float64Array(la),lons:new Float64Array(lo),u:uA,v:vA,nr:nr,nc:nc}
-}
-function renderCurr(){
-  if(!CUR)return;if(currLayer){M.removeLayer(currLayer);currLayer=null}
-  var lats=CUR.lats,lons=CUR.lons,u=CUR.u,v=CUR.v,nr=CUR.nr,nc=CUR.nc;
-  var maxSpd=0;for(var i=0;i<u.length;i++){if(isNaN(u[i]))continue;var s=Math.sqrt(u[i]*u[i]+v[i]*v[i]);if(s>maxSpd)maxSpd=s}
-  var CG=L.GridLayer.extend({createTile:function(coords){
-    var tile=document.createElement('canvas'),sz=this.getTileSize();tile.width=sz.x;tile.height=sz.y;var ctx=tile.getContext('2d');
-    var nw=this._map.unproject([coords.x*sz.x,coords.y*sz.y],coords.z),se=this._map.unproject([(coords.x+1)*sz.x,(coords.y+1)*sz.y],coords.z);
-    var latN=nw.lat,latS=se.lat,lonW=nw.lng,lonE=se.lng;
-    var r0=bSearch(lats,latS),r1=bSearch(lats,latN),c0=bSearch(lons,lonW),c1=bSearch(lons,lonE);
-    var rMin=Math.min(r0,r1),rMax=Math.max(r0,r1),cMin=Math.min(c0,c1),cMax=Math.max(c0,c1);
-    // denser sampling: show more arrows
-    var rStep=Math.max(1,Math.ceil((rMax-rMin)/25)),cStep=Math.max(1,Math.ceil((cMax-cMin)/25));
-    for(var r=rMin;r<=rMax;r+=rStep)for(var c=cMin;c<=cMax;c+=cStep){
-      var ui=u[r*nc+c],vi=v[r*nc+c];if(isNaN(ui)||isNaN(vi))continue;
-      var spd=Math.sqrt(ui*ui+vi*vi);if(spd<.0005)continue;
-      var lat=lats[r],lon=lons[c];if(!isInSel(lat,lon))continue;
-      var px=((lon-lonW)/(lonE-lonW))*sz.x,py=((latN-lat)/(latN-latS))*sz.y;
-      // angle: atan2(-v, u) for screen coords (y flipped)
-      var angle=Math.atan2(-vi,ui);
-      var t=Math.min(spd/maxSpd,1);
-      // size scales with speed
-      var sz2=5+t*9; // 5..14px
-
-      // color: blue-purple gradient (like reference)
-      // slow = light periwinkle (140,160,220), fast = vivid blue-violet (90,60,210)
-      var cr=Math.round(150-t*110);
-      var cg=Math.round(170-t*150);
-      var cb=Math.round(230-t*70);
-
-      ctx.save();
-      ctx.translate(px,py);
-      ctx.rotate(angle);
-      ctx.globalAlpha=0.7+t*0.25;
-
-      // filled triangle chevron pointing right (in rotated frame)
-      ctx.beginPath();
-      ctx.moveTo(sz2,0);           // tip
-      ctx.lineTo(-sz2*0.5,-sz2*0.55); // top-left
-      ctx.lineTo(-sz2*0.25,0);     // inner notch
-      ctx.lineTo(-sz2*0.5,sz2*0.55);  // bottom-left
-      ctx.closePath();
-      ctx.fillStyle='rgb('+cr+','+cg+','+cb+')';
-      ctx.fill();
-
-      // subtle bright edge on fast currents
-      if(t>0.3){
-        ctx.globalAlpha=t*0.4;
-        ctx.strokeStyle='rgba(160,180,255,.8)';
-        ctx.lineWidth=0.8;
-        ctx.stroke();
+  var pos = dataStart, row = 0, gridRow = 0, lastPct = -1;
+  while (pos < t.length && row < nr) {
+    if (row % stride !== 0) { while (pos < t.length && t.charCodeAt(pos) !== 10) pos++; pos++; row++; continue; }
+    var col = 0, gridCol = 0;
+    while (pos < t.length && t.charCodeAt(pos) !== 10) {
+      while (pos < t.length) { var ch = t.charCodeAt(pos); if (ch === 32 || ch === 9 || ch === 13) pos++; else break; }
+      if (pos >= t.length || t.charCodeAt(pos) === 10) break;
+      var ns = pos; while (pos < t.length) { ch = t.charCodeAt(pos); if (ch === 32 || ch === 9 || ch === 10 || ch === 13) break; pos++; }
+      if (col % stride === 0 && gridCol < gnc) {
+        var v = +t.substring(ns, pos);
+        if (v !== nd && !isNaN(v) && v < 0) gr[gridRow * gnc + gridCol] = -v;
+        gridCol++;
       }
-      ctx.restore()
+      col++;
     }
-    return tile
-  }});
-  currLayer=new CG({opacity:.85,updateWhenZooming:false,updateWhenIdle:true}).addTo(M);
-  $('cLeg').style.display='block';$('cSpd').textContent='Max: '+(maxSpd*100).toFixed(1)+' cm/s';$('cSpdMax').textContent=(maxSpd*100|0)+' cm/s'
-}
-function setCOp(v){if(currLayer)currLayer.setOpacity(v/100)}
-
-// ──────────── LITHOLOGY ────────────
-async function loadLitho(f){
-  if(!G){T('Chargez la bathymétrie d\'abord','err');return}
-  T('Sédiments ('+((f.size/1e6)|0)+' Mo)...','load');await tick();
-  try{var t=await f.text();await parseLitho(t);renderLitho();T(LITHO.nr+'×'+LITHO.nc+' cellules','ok')}catch(e){T('Erreur: '+e.message,'err')}
-}
-async function parseLitho(t){
-  var ls=t.split('\n'),sr=0;if(ls[0]&&/[a-zA-Z]/.test(ls[0]))sr=1;
-  var stride=1;while(Math.ceil((ls.length-sr)/stride)>MAX_CELLS)stride++;
-  T('Litho stride='+stride,'load');await tick();
-  var colLat=0,colLon=1,colId=2,colLabel=3;
-  if(sr>0){var hdr=ls[0].toLowerCase().split(',');hdr.forEach(function(h,i){h=h.trim();if(h==='lat'||h==='latitude')colLat=i;if(h==='lon'||h==='longitude')colLon=i;if(h==='soil_id'||h==='type_id'||h==='id')colId=i;if(h==='label'||h==='type'||h==='name')colLabel=i})}
-  var latS=new Set,lonS=new Set,raw=[],labels={};
-  for(var i=sr;i<ls.length;i+=stride){
-    var p=ls[i].split(',');if(p.length<3)continue;
-    var lat=+p[colLat],lon=+p[colLon],sid=parseInt(p[colId]);
-    if(!isFinite(lat)||!isFinite(lon)||isNaN(sid))continue;
-    latS.add(lat);lonS.add(lon);raw.push(lat,lon,sid);
-    if(p[colLabel]&&!labels[sid])labels[sid]=p[colLabel].trim();
-    if(i%100000===0){T('Litho '+((i/ls.length*100)|0)+'%','load');await tick()}
+    if (pos < t.length) pos++; gridRow++; row++;
+    var pct = row / nr * 100 | 0;
+    if (pct % 5 === 0 && pct !== lastPct) { lastPct = pct; T('ASC ' + pct + '%', 'load'); await tick(); }
   }
-  if(!raw.length)throw new Error('Aucune donnée');
-  var la=[...latS].sort(function(a,b){return a-b}),lo=[...lonS].sort(function(a,b){return a-b});
-  var nr=la.length,nc=lo.length,laI=new Map,loI=new Map;
-  la.forEach(function(v,i){laI.set(v,i)});lo.forEach(function(v,i){loI.set(v,i)});
-  var grid=new Uint8Array(nr*nc).fill(255);
-  for(i=0;i<raw.length;i+=3){var ri=laI.get(raw[i]),ci=loI.get(raw[i+1]);if(ri!=null&&ci!=null)grid[ri*nc+ci]=raw[i+2]}
-  LITHO={lats:new Float64Array(la),lons:new Float64Array(lo),grid:grid,nr:nr,nc:nc,labels:labels}
+  G = { la: gla, lo: glo, nr: gnr, nc: gnc, flat: gr };
+  T(gnr + '×' + gnc + ' chargé', 'ok');
 }
-function renderLitho() {
-  if (!LITHO || !G) return;
-  if (lithoLayer) { M.removeLayer(lithoLayer); lithoLayer = null; }
 
-  var dep = +$('inD').value || 651, band = 50, depMin = dep - band, depMax = dep + band;
-  var lLa = LITHO.lats, lLo = LITHO.lons, lGr = LITHO.grid, lNr = LITHO.nr, lNc = LITHO.nc;
-  var bLa = G.la, bLo = G.lo, bNc = G.nc, bFlat = G.flat;
-  var dLat = lNr > 1 ? Math.abs(lLa[1] - lLa[0]) / 2 : 0.01;
-  var dLon = lNc > 1 ? Math.abs(lLo[1] - lLo[0]) / 2 : 0.01;
+async function parseCSVBathy(t) {
+  var ls = t.split('\n'), sr = 0;
+  if (ls[0] && /[a-zA-Z]/.test(ls[0])) { sr = 1; if (ls[1] && /[a-zA-Z]/.test(ls[1])) sr = 2; }
+  var stride = 1; while (Math.ceil((ls.length - sr) / stride) > MAX_CELLS) stride++;
+  T('CSV stride=' + stride, 'load'); await tick();
+  var latS = new Set, lonS = new Set, raw = [];
+  for (var i = sr; i < ls.length; i += stride) {
+    var p = ls[i].split(/[,;\t\s]+/); if (p.length < 3) continue;
+    var a = +p[0], b = +p[1], val = +p[2]; if (!isFinite(a) || !isFinite(b) || !isFinite(val)) continue;
+    var la, lo; if (Math.abs(a) <= 90 && Math.abs(b) > 90) { la = a; lo = b; } else { la = b; lo = a; }
+    if (val >= 0) continue; raw.push(la, lo, -val); latS.add(la); lonS.add(lo);
+    if (i % 50000 === 0) { T('CSV ' + ((i / ls.length * 100) | 0) + '%', 'load'); await tick(); }
+  }
+  if (!raw.length) throw new Error('Aucun point sous-marin');
+  var sla = [...latS].sort(function(a, b) { return a - b; });
+  var slo = [...lonS].sort(function(a, b) { return a - b; });
+  var gnr = sla.length, gnc = slo.length;
+  var laI = new Map, loI = new Map;
+  sla.forEach(function(v, i) { laI.set(v, i); }); slo.forEach(function(v, i) { loI.set(v, i); });
+  var flat = new Float32Array(gnr * gnc).fill(NaN);
+  for (i = 0; i < raw.length; i += 3) {
+    var ri = laI.get(raw[i]), ci = loI.get(raw[i + 1]);
+    if (ri != null && ci != null) flat[ri * gnc + ci] = raw[i + 2];
+  }
+  G = { la: new Float64Array(sla), lo: new Float64Array(slo), nr: gnr, nc: gnc, flat: flat };
+  T(gnr + '×' + gnc + ' chargé', 'ok');
+}
 
-  var LG = L.GridLayer.extend({
-    createTile: function (coords) {
-      var tile = document.createElement('canvas');
-      var sz = this.getTileSize();
-      tile.width = sz.x;
-      tile.height = sz.y;
+// ──────────── BATHY RENDERER ────────────
+// Uses fillRect per grid cell (no gaps at any zoom level)
+function renderBathy() {
+  if (!G) return;
+  if (bathyLayer) { M.removeLayer(bathyLayer); bathyLayer = null; }
+
+  var maxD = 0, flat = G.flat;
+  for (var i = 0; i < flat.length; i++) { if (flat[i] > maxD) maxD = flat[i]; }
+  buildLUT(Math.ceil(maxD));
+
+  var la = G.la, lo = G.lo, nr = G.nr, nc = G.nc;
+  // Pre-compute half-cell sizes for proper cell filling
+  var halfLatStep = nr > 1 ? Math.abs(la[1] - la[0]) / 2 : 0.01;
+  var halfLonStep = nc > 1 ? Math.abs(lo[1] - lo[0]) / 2 : 0.01;
+
+  var BathyGrid = L.GridLayer.extend({
+    createTile: function(coords) {
+      var tile = document.createElement('canvas'), sz = this.getTileSize();
+      tile.width = sz.x; tile.height = sz.y;
       var ctx = tile.getContext('2d');
 
       var nw = this._map.unproject([coords.x * sz.x, coords.y * sz.y], coords.z);
@@ -696,78 +805,571 @@ function renderLitho() {
       var latSpan = latN - latS, lonSpan = lonE - lonW;
       if (latSpan <= 0 || lonSpan <= 0) return tile;
 
-      var r0 = bSearch(lLa, latS - dLat);
-      var r1 = bSearch(lLa, latN + dLat);
-      var c0 = bSearch(lLo, lonW - dLon);
-      var c1 = bSearch(lLo, lonE + dLon);
-      var rMin = Math.max(0, Math.min(r0, r1));
-      var rMax = Math.min(lNr - 1, Math.max(r0, r1));
-      var cMin = Math.max(0, Math.min(c0, c1));
-      var cMax = Math.min(lNc - 1, Math.max(c0, c1));
-
+      var r0 = bSearch(la, latS - halfLatStep), r1 = bSearch(la, latN + halfLatStep);
+      var c0 = bSearch(lo, lonW - halfLonStep), c1 = bSearch(lo, lonE + halfLonStep);
+      var rMin = Math.max(0, Math.min(r0, r1)), rMax = Math.min(nr - 1, Math.max(r0, r1));
+      var cMin = Math.max(0, Math.min(c0, c1)), cMax = Math.min(nc - 1, Math.max(c0, c1));
       if (rMax < rMin || cMax < cMin) return tile;
 
-      var cellH = Math.max(2, Math.ceil(dLat * 2 * (sz.y / latSpan)) + 1);
-      var cellW = Math.max(2, Math.ceil(dLon * 2 * (sz.x / lonSpan)) + 1);
-
-      ctx.globalAlpha = 0.85;
+      // Cell pixel size
+      var cellH = Math.max(1, Math.ceil(halfLatStep * 2 * (sz.y / latSpan)));
+      var cellW = Math.max(1, Math.ceil(halfLonStep * 2 * (sz.x / lonSpan)));
+      ctx.globalAlpha = 0.5;
 
       for (var r = rMin; r <= rMax; r++) {
-        var lat = lLa[r];
+        var lat = la[r];
         for (var c = cMin; c <= cMax; c++) {
-          var id = lGr[r * lNc + c];
-          if (id === 255) continue;
+          var v = flat[r * nc + c];
+          if (isNaN(v) || v <= 0) continue;
+          if (!isInSel(lat, lo[c])) continue;
 
-          var lon = lLo[c];
-          if (!isInSel(lat, lon)) continue;
-          var px = (lon - lonW) / lonSpan * sz.x;
-          var py = (latN - lat) / latSpan * sz.y;
-          if (px < -cellW || px > sz.x + cellW || py < -cellH || py > sz.y + cellH) continue;
+          var di = v | 0;
+          if (di * 3 >= colorLUT.length) continue;
 
-          var col = SOIL_COL[id] || SOIL_FB;
-          ctx.fillStyle = 'rgb(' + col[0] + ',' + col[1] + ',' + col[2] + ')';
-          ctx.fillRect(px - cellW / 2, py - cellH / 2, cellW, cellH);
+          var px = ((lo[c] - lonW) / lonSpan) * sz.x;
+          var py = ((latN - lat) / latSpan) * sz.y;
+
+          ctx.fillStyle = 'rgb(' + colorLUT[di * 3] + ',' + colorLUT[di * 3 + 1] + ',' + colorLUT[di * 3 + 2] + ')';
+          ctx.fillRect(px - cellW / 2, py - cellH / 2, cellW + 1, cellH + 1);
         }
       }
       return tile;
     }
   });
 
-  lithoLayer = new LG({ opacity: 0.65, updateWhenZooming: false, updateWhenIdle: true }).addTo(M);
+  bathyLayer = new BathyGrid({ opacity: 0.6, updateWhenZooming: false, updateWhenIdle: true }).addTo(M);
+  bathyLayer.bringToBack();
+  $('dLeg').style.display = 'block'; $('dBar').style.background = depthGradientCSS();
+  $('dL0').textContent = '0m'; $('dL1').textContent = (maxD / 2 | 0) + 'm'; $('dL2').textContent = (maxD | 0) + 'm';
+  $('lgT').textContent = 'Isobathe ' + (+$('inD').value) + 'm'; $('lgd').style.display = 'block'; uLP();
+}
+
+// ──────────── MARCHING SQUARES ────────────
+function marchingSquares(threshold) {
+  if (!G) return [];
+  var la = G.la, lo = G.lo, nr = G.nr, nc = G.nc, flat = G.flat, segments = [];
+  for (var r = 0; r < nr - 1; r++) {
+    for (var c = 0; c < nc - 1; c++) {
+      var bl = flat[r * nc + c], br = flat[r * nc + c + 1];
+      var tl = flat[(r + 1) * nc + c], tr = flat[(r + 1) * nc + c + 1];
+      if (isNaN(tl) || isNaN(tr) || isNaN(br) || isNaN(bl)) continue;
+      var cs = 0;
+      if (tl >= threshold) cs |= 8; if (tr >= threshold) cs |= 4;
+      if (br >= threshold) cs |= 2; if (bl >= threshold) cs |= 1;
+      if (!cs || cs === 15) continue;
+
+      var yB = la[r], yT = la[r + 1], xL = lo[c], xR = lo[c + 1];
+      function lerp(v1, v2, c1, c2) {
+        return Math.abs(v1 - v2) < .001 ? (c1 + c2) / 2 : c1 + (threshold - v1) / (v2 - v1) * (c2 - c1);
+      }
+      var T2 = [yT, lerp(tl, tr, xL, xR)], B = [yB, lerp(bl, br, xL, xR)];
+      var Le = [lerp(bl, tl, yB, yT), xL], R = [lerp(br, tr, yB, yT), xR];
+      switch (cs) {
+        case 1: case 14: segments.push([Le, B]); break;
+        case 2: case 13: segments.push([B, R]); break;
+        case 3: case 12: segments.push([Le, R]); break;
+        case 4: case 11: segments.push([T2, R]); break;
+        case 5: segments.push([Le, T2], [B, R]); break;
+        case 6: case 9: segments.push([T2, B]); break;
+        case 7: case 8: segments.push([Le, T2]); break;
+        case 10: segments.push([Le, B], [T2, R]); break;
+      }
+    }
+  }
+  return segments;
+}
+
+// ──────────── ISOBATH RENDERING ────────────
+function renderIsobaths() {
+  if (!G) return;
+  var dep = +$('inD').value;
+  if (IL) M.removeLayer(IL);
+  IL = L.layerGroup().addTo(M);
+
+  var sg = marchingSquares(dep);
+  sg.forEach(function(s) {
+    var midLat = (s[0][0] + s[1][0]) / 2, midLon = (s[0][1] + s[1][1]) / 2;
+    if (!isInSel(midLat, midLon)) return;
+    L.polyline(s, { color: '#ff3d71', weight: 3.5, opacity: 1 }).addTo(IL);
+  });
+
+  var ctr = M.getCenter();
+  [50, 100, 200, 500, 1000, 1500, 2000, 3000, 5000].forEach(function(d) {
+    if (d === dep) return;
+    var rs = marchingSquares(d); if (!rs.length) return;
+    rs.forEach(function(s) {
+      var mLat = (s[0][0] + s[1][0]) / 2, mLon = (s[0][1] + s[1][1]) / 2;
+      if (!isInSel(mLat, mLon)) return;
+      L.polyline(s, { color: 'rgba(255,255,255,.3)', weight: 1, dashArray: '3,5' }).addTo(IL);
+    });
+    var best = rs[0], bd = 1e9;
+    rs.forEach(function(s) {
+      var dd = Math.abs((s[0][0] + s[1][0]) / 2 - ctr.lat) + Math.abs((s[0][1] + s[1][1]) / 2 - ctr.lng);
+      if (dd < bd) { bd = dd; best = s; }
+    });
+    L.marker([(best[0][0] + best[1][0]) / 2, (best[0][1] + best[1][1]) / 2], {
+      icon: L.divIcon({ html: '<div style="font:500 9px DM Mono,monospace;color:rgba(255,255,255,.55);text-shadow:0 0 4px #000">' + d + 'm</div>', className: '', iconSize: [40, 14], iconAnchor: [20, 7] })
+    }).addTo(IL);
+  });
+
+  updateIsobathResults(dep, sg);
+  T('Isobathe ' + dep + 'm : ' + sg.length + ' segments', 'ok');
+}
+
+function updateIsobathResults(dep, sg) {
+  if (!sg.length) { $('rA').innerHTML = '<p style="color:var(--accent2);font-size:12px;margin-top:12px">Aucune isobathe.</p>'; return; }
+  var allLa = [], allLo = [];
+  sg.forEach(function(s) { allLa.push(s[0][0], s[1][0]); allLo.push(s[0][1], s[1][1]); });
+  var laMin = Math.min.apply(null, allLa), laMax = Math.max.apply(null, allLa);
+  var loMin = Math.min.apply(null, allLo), loMax = Math.max.apply(null, allLo);
+  var cLa = (laMin + laMax) / 2, cLo = (loMin + loMax) / 2;
+  var h = '<div class="sec">Isobathe ' + dep + 'm</div>' +
+    '<div class="st"><span class="sl">Segments</span><span class="sv">' + sg.length + '</span></div>' +
+    '<div class="st"><span class="sl">Lat</span><span class="sv">' + laMin.toFixed(4) + '° → ' + laMax.toFixed(4) + '°</span></div>' +
+    '<div class="st"><span class="sl">Lon</span><span class="sv">' + loMin.toFixed(4) + '° → ' + loMax.toFixed(4) + '°</span></div>';
+  if (PM.length) {
+    h += '<div class="sec">Ports</div>';
+    PM.map(function(m) {
+      var ll = m.getLatLng(), nm = (m.getPopup().getContent().match(/<b>⚓ (.+?)<\/b>/) || [])[1] || 'Port';
+      return { name: nm, lat: ll.lat, lon: ll.lng, dist: haversine(ll.lat, ll.lng, cLa, cLo) };
+    }).sort(function(a, b) { return a.dist - b.dist; }).slice(0, 6).forEach(function(p) {
+      h += '<div class="pc" onclick="M.setView([' + p.lat + ',' + p.lon + '],13)"><div class="pn">⚓ ' + p.name + '</div><div class="pd">' + p.dist.toFixed(1) + 'km</div></div>';
+    });
+  }
+  h += '<div class="sec">Export</div><div class="er"><button class="btn" onclick="eCSV()">CSV</button><button class="btn" onclick="eGJ()">GeoJSON</button></div>';
+  $('rA').innerHTML = h;
+}
+
+// ══════════════════════════════════════════
+//  CURRENTS — Parse & render
+// ══════════════════════════════════════════
+
+async function loadCurr(f) {
+  T('Courants...', 'load'); await tick();
+  try { var t = await f.text(); parseCurrCSV(t); renderCurrents(); T(CUR.nr + '×' + CUR.nc + ' vecteurs', 'ok'); }
+  catch (e) { T('Erreur: ' + e.message, 'err'); }
+}
+
+function parseCurrCSV(t) {
+  var ls = t.split('\n'), sr = 0;
+  if (ls[0] && /[a-zA-Z]/.test(ls[0])) { sr = 1; if (ls[1] && /[a-zA-Z]/.test(ls[1])) sr = 2; }
+  var latS = new Set, lonS = new Set, raw = [];
+  for (var i = sr; i < ls.length; i++) {
+    var p = ls[i].split(/[,;\t]+/); var lat, lon, u, v;
+    if (p.length >= 6) { lat = +p[2]; lon = +p[3]; u = +p[4]; v = +p[5]; }
+    else if (p.length >= 4) { lat = +p[0]; lon = +p[1]; u = +p[2]; v = +p[3]; }
+    else continue;
+    if (!isFinite(lat) || !isFinite(lon) || !isFinite(u) || !isFinite(v) || isNaN(u) || isNaN(v)) continue;
+    if (lon > 180) lon -= 360;
+    latS.add(lat); lonS.add(lon); raw.push(lat, lon, u, v);
+  }
+  if (!raw.length) throw new Error('Aucune donnée');
+  var la = [...latS].sort(function(a, b) { return a - b; });
+  var lo = [...lonS].sort(function(a, b) { return a - b; });
+  var nr = la.length, nc = lo.length, laI = new Map, loI = new Map;
+  la.forEach(function(v, i) { laI.set(v, i); }); lo.forEach(function(v, i) { loI.set(v, i); });
+  var uA = new Float32Array(nr * nc).fill(NaN), vA = new Float32Array(nr * nc).fill(NaN);
+  for (i = 0; i < raw.length; i += 4) {
+    var ri = laI.get(raw[i]), ci = loI.get(raw[i + 1]);
+    if (ri != null && ci != null) { uA[ri * nc + ci] = raw[i + 2]; vA[ri * nc + ci] = raw[i + 3]; }
+  }
+  CUR = { lats: new Float64Array(la), lons: new Float64Array(lo), u: uA, v: vA, nr: nr, nc: nc };
+}
+
+function renderCurrents() {
+  if (!CUR) return;
+  if (currLayer) { M.removeLayer(currLayer); currLayer = null; }
+  var lats = CUR.lats, lons = CUR.lons, u = CUR.u, v = CUR.v, nr = CUR.nr, nc = CUR.nc;
+  var maxSpd = 0;
+  for (var i = 0; i < u.length; i++) {
+    if (isNaN(u[i])) continue;
+    var s = Math.sqrt(u[i] * u[i] + v[i] * v[i]); if (s > maxSpd) maxSpd = s;
+  }
+
+  var CurrGrid = L.GridLayer.extend({
+    createTile: function(coords) {
+      var tile = document.createElement('canvas'), sz = this.getTileSize();
+      tile.width = sz.x; tile.height = sz.y;
+      var ctx = tile.getContext('2d');
+      var nw = this._map.unproject([coords.x * sz.x, coords.y * sz.y], coords.z);
+      var se = this._map.unproject([(coords.x + 1) * sz.x, (coords.y + 1) * sz.y], coords.z);
+      var latN = nw.lat, latS = se.lat, lonW = nw.lng, lonE = se.lng;
+
+      var r0 = bSearch(lats, latS), r1 = bSearch(lats, latN);
+      var c0 = bSearch(lons, lonW), c1 = bSearch(lons, lonE);
+      var rMin = Math.min(r0, r1), rMax = Math.max(r0, r1);
+      var cMin = Math.min(c0, c1), cMax = Math.max(c0, c1);
+      var rStep = Math.max(1, Math.ceil((rMax - rMin) / 25));
+      var cStep = Math.max(1, Math.ceil((cMax - cMin) / 25));
+
+      for (var r = rMin; r <= rMax; r += rStep) {
+        for (var c = cMin; c <= cMax; c += cStep) {
+          var ui = u[r * nc + c], vi = v[r * nc + c];
+          if (isNaN(ui) || isNaN(vi)) continue;
+          var spd = Math.sqrt(ui * ui + vi * vi); if (spd < .0005) continue;
+          var lat = lats[r], lon = lons[c];
+          if (!isInSel(lat, lon)) continue;
+
+          var px = ((lon - lonW) / (lonE - lonW)) * sz.x;
+          var py = ((latN - lat) / (latN - latS)) * sz.y;
+          var angle = Math.atan2(-vi, ui);
+          var t = Math.min(spd / maxSpd, 1);
+          var arrowSz = 5 + t * 9;
+          var cr = Math.round(150 - t * 110), cg = Math.round(170 - t * 150), cb = Math.round(230 - t * 70);
+
+          ctx.save();
+          ctx.translate(px, py); ctx.rotate(angle); ctx.globalAlpha = 0.7 + t * 0.25;
+          ctx.beginPath();
+          ctx.moveTo(arrowSz, 0);
+          ctx.lineTo(-arrowSz * 0.5, -arrowSz * 0.55);
+          ctx.lineTo(-arrowSz * 0.25, 0);
+          ctx.lineTo(-arrowSz * 0.5, arrowSz * 0.55);
+          ctx.closePath();
+          ctx.fillStyle = 'rgb(' + cr + ',' + cg + ',' + cb + ')'; ctx.fill();
+          if (t > 0.3) { ctx.globalAlpha = t * 0.4; ctx.strokeStyle = 'rgba(160,180,255,.8)'; ctx.lineWidth = 0.8; ctx.stroke(); }
+          ctx.restore();
+        }
+      }
+      return tile;
+    }
+  });
+
+  currLayer = new CurrGrid({ opacity: 0.85, updateWhenZooming: false, updateWhenIdle: true }).addTo(M);
+  $('cLeg').style.display = 'block';
+  $('cSpd').textContent = 'Max: ' + (maxSpd * 100).toFixed(1) + ' cm/s';
+  $('cSpdMax').textContent = (maxSpd * 100 | 0) + ' cm/s';
+}
+function setCOp(v) { if (currLayer) currLayer.setOpacity(v / 100); }
+
+// ══════════════════════════════════════════
+//  LITHOLOGY — Parse, mask, render
+// ══════════════════════════════════════════
+
+async function loadLitho(f) {
+  if (!G) { T('Chargez la bathymétrie d\'abord', 'err'); return; }
+  T('Sédiments (' + ((f.size / 1e6) | 0) + ' Mo)...', 'load'); await tick();
+  try {
+    var t = await f.text(); await parseLitho(t);
+    // Initialize filters: all soil types visible
+    initLithoFilters();
+    // Build dynamic legend with checkboxes
+    buildLithoLegend();
+    T('Calcul du masque...', 'load'); await tick();
+    var count = computeLithoMask();
+    renderLitho();
+    T(LITHO.nr + '×' + LITHO.nc + ' cellules, ' + count + ' visibles', 'ok');
+  } catch (e) { T('Erreur: ' + e.message, 'err'); }
+}
+
+async function parseLitho(t) {
+  var ls = t.split('\n'), sr = 0;
+  if (ls[0] && /[a-zA-Z]/.test(ls[0])) sr = 1;
+  var stride = 1; while (Math.ceil((ls.length - sr) / stride) > MAX_CELLS) stride++;
+  T('Litho stride=' + stride, 'load'); await tick();
+
+  // ── Column detection ──
+  // Supports: lat,lon,soil_id,label  OR  lat,lon,label  OR  lat,lon,id
+  var colLat = 0, colLon = 1, colId = -1, colLabel = -1;
+  if (sr > 0) {
+    var hdr = ls[0].toLowerCase().split(',');
+    hdr.forEach(function(h, i) {
+      h = h.trim();
+      if (h === 'lat' || h === 'latitude') colLat = i;
+      if (h === 'lon' || h === 'longitude') colLon = i;
+      if (h === 'soil_id' || h === 'type_id' || h === 'id') colId = i;
+      // Flexible label matching: exact or contains
+      if (h === 'label' || h === 'type' || h === 'name' ||
+          h.indexOf('label') !== -1 || h.indexOf('name') !== -1 ||
+          h.indexOf('lithol') !== -1 || h.indexOf('sediment') !== -1 ||
+          h.indexOf('type') !== -1) {
+        if (colLabel === -1) colLabel = i; // first match wins
+      }
+    });
+  }
+
+  // If no explicit ID column found, try to infer
+  if (colId === -1 && colLabel === -1) {
+    // fallback: assume col 2 is id if numeric, else label
+    colId = 2; colLabel = 3;
+  } else if (colId === -1 && colLabel !== -1) {
+    // text-only mode: labels but no numeric id column
+    colId = -1; // will auto-assign below
+  } else if (colId !== -1 && colLabel === -1) {
+    colLabel = colId + 1; // label after id
+  }
+
+  // ── First pass: detect if ID column is numeric or text ──
+  var idIsNumeric = true;
+  if (colId !== -1) {
+    for (var probe = sr; probe < Math.min(sr + 20, ls.length); probe++) {
+      var pp = ls[probe].split(',');
+      if (pp.length <= colId) continue;
+      var testVal = pp[colId].trim();
+      if (testVal && isNaN(parseInt(testVal))) { idIsNumeric = false; break; }
+    }
+  }
+
+  // If ID column exists but contains text, treat it as labels
+  if (colId !== -1 && !idIsNumeric) {
+    colLabel = colId;
+    colId = -1;
+  }
+
+  // ── Parse rows ──
+  var latS = new Set, lonS = new Set, raw = [], labels = {};
+  var labelToId = {};  // auto-assign: text label → numeric id
+  var nextAutoId = 0;
+
+  for (var i = sr; i < ls.length; i += stride) {
+    var p = ls[i].split(','); if (p.length < 3) continue;
+    var lat = +p[colLat], lon = +p[colLon];
+    if (!isFinite(lat) || !isFinite(lon)) continue;
+
+    var sid, labelText;
+
+    if (colId !== -1) {
+      // Numeric ID mode
+      sid = parseInt(p[colId]);
+      if (isNaN(sid)) continue;
+      labelText = (colLabel !== -1 && p[colLabel]) ? p[colLabel].trim() : null;
+    } else {
+      // Text label mode: auto-assign numeric IDs
+      labelText = (colLabel !== -1 && p[colLabel]) ? p[colLabel].trim() : null;
+      if (!labelText) continue;
+      if (!(labelText in labelToId)) {
+        labelToId[labelText] = nextAutoId++;
+      }
+      sid = labelToId[labelText];
+    }
+
+    latS.add(lat); lonS.add(lon); raw.push(lat, lon, sid);
+    if (labelText && !labels[sid]) labels[sid] = labelText;
+    if (i % 100000 === 0) { T('Litho ' + ((i / ls.length * 100) | 0) + '%', 'load'); await tick(); }
+  }
+
+  if (!raw.length) throw new Error('Aucune donnée litho');
+
+  var la = [...latS].sort(function(a, b) { return a - b; });
+  var lo = [...lonS].sort(function(a, b) { return a - b; });
+  var nr = la.length, nc = lo.length, laI = new Map, loI = new Map;
+  la.forEach(function(v, i) { laI.set(v, i); }); lo.forEach(function(v, i) { loI.set(v, i); });
+  var grid = new Uint8Array(nr * nc).fill(255);
+  for (i = 0; i < raw.length; i += 3) {
+    var ri = laI.get(raw[i]), ci = loI.get(raw[i + 1]);
+    if (ri != null && ci != null) grid[ri * nc + ci] = raw[i + 2];
+  }
+  LITHO = { lats: new Float64Array(la), lons: new Float64Array(lo), grid: grid, nr: nr, nc: nc, labels: labels };
+
+  console.log('[Litho] ' + nr + '×' + nc + ' grid, ' + Object.keys(labels).length + ' types:',
+    JSON.stringify(labels));
+}
+
+// ──────────── LITHO FILTERS & DYNAMIC LEGEND ────────────
+
+// Scan loaded litho data and activate all soil types
+function initLithoFilters() {
+  LITHO_FILTERS.clear();
+  if (!LITHO) return;
+  var grid = LITHO.grid, n = grid.length;
+  for (var i = 0; i < n; i++) {
+    if (grid[i] !== 255) LITHO_FILTERS.add(grid[i]);
+  }
+}
+
+// Count cells per soil type (for display in legend)
+function countSoilTypes() {
+  var counts = {};
+  if (!LITHO) return counts;
+  var grid = LITHO.grid, n = grid.length;
+  for (var i = 0; i < n; i++) {
+    if (grid[i] !== 255) counts[grid[i]] = (counts[grid[i]] || 0) + 1;
+  }
+  return counts;
+}
+
+// Build the clickable legend from actual data
+function buildLithoLegend() {
+  if (!LITHO) return;
+  var container = $('lLegItems');
+  var counts = countSoilTypes();
+  var ids = Object.keys(counts).map(Number).sort(function(a, b) { return a - b; });
+
+  var html = '';
+  ids.forEach(function(id) {
+    var label = LITHO.labels[id] || DEFAULT_SOIL_LABELS[id] || ('Type ' + id);
+    var col = SOIL_COL[id] || SOIL_FB;
+    var rgb = 'rgb(' + col[0] + ',' + col[1] + ',' + col[2] + ')';
+    var isOn = LITHO_FILTERS.has(id);
+    html += '<div class="soil-item' + (isOn ? '' : ' off') + '" id="soil-' + id + '" onclick="toggleSoilType(' + id + ')">' +
+      '<div class="soil-swatch" style="background:' + (isOn ? rgb : 'transparent') + '"></div>' +
+      '<span class="soil-label">' + label + '</span>' +
+      '<span class="soil-count">' + counts[id] + '</span>' +
+      '</div>';
+  });
+  container.innerHTML = html;
+}
+
+// Toggle a single soil type on/off
+function toggleSoilType(id) {
+  if (LITHO_FILTERS.has(id)) LITHO_FILTERS.delete(id); else LITHO_FILTERS.add(id);
+  updateLegendItem(id);
+  refreshLithoFromFilters();
+}
+
+// Select all / deselect all
+function setAllSoilTypes(on) {
+  if (!LITHO) return;
+  if (on) {
+    initLithoFilters(); // re-add all
+  } else {
+    LITHO_FILTERS.clear();
+  }
+  buildLithoLegend(); // rebuild all items
+  refreshLithoFromFilters();
+}
+
+// Update a single legend item visual state
+function updateLegendItem(id) {
+  var el = $('soil-' + id);
+  if (!el) return;
+  var isOn = LITHO_FILTERS.has(id);
+  var col = SOIL_COL[id] || SOIL_FB;
+  var rgb = 'rgb(' + col[0] + ',' + col[1] + ',' + col[2] + ')';
+  el.className = 'soil-item' + (isOn ? '' : ' off');
+  el.querySelector('.soil-swatch').style.background = isOn ? rgb : 'transparent';
+}
+
+// Recompute mask + re-render litho after filter change
+function refreshLithoFromFilters() {
+  if (!LITHO || !G) return;
+  var count = computeLithoMask();
+  renderLitho();
+  T(count + ' cellules sédiment visibles', 'ok');
+}
+
+// Litho tile renderer: uses LITHO_MASK (pre-computed), no depth lookup per tile
+function renderLitho() {
+  if (!LITHO || !G || !LITHO_MASK) return;
+  if (lithoLayer) { M.removeLayer(lithoLayer); lithoLayer = null; }
+
+  var lithoLats = LITHO.lats, lithoLons = LITHO.lons;
+  var lithoGrid = LITHO.grid, lithoNr = LITHO.nr, lithoNc = LITHO.nc;
+  var mask = LITHO_MASK;
+
+  var halfCellLat = lithoNr > 1 ? Math.abs(lithoLats[1] - lithoLats[0]) / 2 : 0.01;
+  var halfCellLon = lithoNc > 1 ? Math.abs(lithoLons[1] - lithoLons[0]) / 2 : 0.01;
+
+  var LithoGrid = L.GridLayer.extend({
+    createTile: function(coords) {
+      var tile = document.createElement('canvas'), sz = this.getTileSize();
+      tile.width = sz.x; tile.height = sz.y;
+      var ctx = tile.getContext('2d');
+
+      var nw = this._map.unproject([coords.x * sz.x, coords.y * sz.y], coords.z);
+      var se = this._map.unproject([(coords.x + 1) * sz.x, (coords.y + 1) * sz.y], coords.z);
+      var latN = nw.lat, latS = se.lat, lonW = nw.lng, lonE = se.lng;
+      var latSpan = latN - latS, lonSpan = lonE - lonW;
+      if (latSpan <= 0 || lonSpan <= 0) return tile;
+
+      var r0 = bSearch(lithoLats, latS - halfCellLat);
+      var r1 = bSearch(lithoLats, latN + halfCellLat);
+      var c0 = bSearch(lithoLons, lonW - halfCellLon);
+      var c1 = bSearch(lithoLons, lonE + halfCellLon);
+      var rMin = Math.max(0, Math.min(r0, r1)), rMax = Math.min(lithoNr - 1, Math.max(r0, r1));
+      var cMin = Math.max(0, Math.min(c0, c1)), cMax = Math.min(lithoNc - 1, Math.max(c0, c1));
+      if (rMax < rMin || cMax < cMin) return tile;
+
+      var cellH = Math.max(2, Math.ceil(halfCellLat * 2 * (sz.y / latSpan)) + 1);
+      var cellW = Math.max(2, Math.ceil(halfCellLon * 2 * (sz.x / lonSpan)) + 1);
+      ctx.globalAlpha = 0.85;
+
+      for (var r = rMin; r <= rMax; r++) {
+        var lat = lithoLats[r];
+        for (var c = cMin; c <= cMax; c++) {
+          var idx = r * lithoNc + c;
+          if (mask[idx] !== 1) continue;
+          if (!isInSel(lat, lithoLons[c])) continue;
+
+          var lon = lithoLons[c];
+          var px = (lon - lonW) / lonSpan * sz.x;
+          var py = (latN - lat) / latSpan * sz.y;
+          if (px < -cellW || px > sz.x + cellW || py < -cellH || py > sz.y + cellH) continue;
+
+          var col = SOIL_COL[lithoGrid[idx]] || SOIL_FB;
+          ctx.fillStyle = 'rgb(' + col[0] + ',' + col[1] + ',' + col[2] + ')';
+          ctx.fillRect(px - cellW / 2, py - cellH / 2, cellW + 1, cellH + 1);
+        }
+      }
+      return tile;
+    }
+  });
+
+  lithoLayer = new LithoGrid({ opacity: 0.65, updateWhenZooming: false, updateWhenIdle: true }).addTo(M);
   $('lLeg').style.display = 'block';
-  $('lLegExtra').innerHTML = '<div style="font-size:9px;color:var(--accent);margin:4px 0;font-family:DM Mono,monospace">Zone: ' + depMin + 'm → ' + depMax + 'm</div>';
+  $('lLegExtra').innerHTML = '<div style="font-size:9px;color:var(--accent);margin:4px 0;font-family:DM Mono,monospace">' + LITHO_FILTERS.size + ' types actifs — océan uniquement</div>';
   $('lgd').style.display = 'block';
   uLP();
 }
-function setLOp(v){if(lithoLayer)lithoLayer.setOpacity(v/100)}
+function setLOp(v) { if (lithoLayer) lithoLayer.setOpacity(v / 100); }
 
-// ──────────── CLICK ────────────
-M.on('click',function(ev){
-  // grid selection mode: toggle cell
-  if(SEL_ON){
-    var key=selKey(ev.latlng.lat,ev.latlng.lng);
-    if(SEL_CELLS.has(key))SEL_CELLS.delete(key);else SEL_CELLS.add(key);
-    $('selCnt').textContent=SEL_CELLS.size;
-    renderSelHighlight();refreshAfterSel();
-    return
+// ──────────── CLICK HANDLER ────────────
+M.on('click', function(ev) {
+  if (SEL_ON) {
+    var key = selKey(ev.latlng.lat, ev.latlng.lng);
+    if (SEL_CELLS.has(key)) SEL_CELLS.delete(key); else SEL_CELLS.add(key);
+    $('selCnt').textContent = SEL_CELLS.size;
+    if (selGridLayer) selGridLayer.redraw();
+    refreshAllLayers();
+    return;
   }
-  var info='';
-  if(G){var r=bSearch(G.la,ev.latlng.lat),c=bSearch(G.lo,ev.latlng.lng),v=G.flat[r*G.nc+c];if(v&&!isNaN(v)&&v>0)info+='<b>Prof: '+v.toFixed(0)+'m</b><br>'}
-  if(LITHO){var r2=bSearch(LITHO.lats,ev.latlng.lat),c2=bSearch(LITHO.lons,ev.latlng.lng),sid=LITHO.grid[r2*LITHO.nc+c2];if(sid!==255){var nm=LITHO.labels[sid]||('Type '+sid);info+='<b>Sol: '+nm+'</b><br>'}}
-  if(info)L.popup().setLatLng(ev.latlng).setContent(info+ev.latlng.lat.toFixed(5)+'°N, '+ev.latlng.lng.toFixed(5)+'°E').openOn(M)
+
+  var info = '';
+  // Depth
+  if (G) {
+    var depth = getDepthAt(ev.latlng.lat, ev.latlng.lng);
+    if (!isNaN(depth) && depth > 0) info += '<b>Prof: ' + depth.toFixed(0) + 'm</b><br>';
+  }
+  // Litho (uses mask)
+  if (LITHO && LITHO_MASK) {
+    var lr = bSearch(LITHO.lats, ev.latlng.lat), lc = bSearch(LITHO.lons, ev.latlng.lng);
+    var lidx = lr * LITHO.nc + lc;
+    var sid = LITHO.grid[lidx];
+    if (sid !== 255 && LITHO_MASK[lidx] === 1) {
+      var nm = LITHO.labels[sid] || ('Type ' + sid);
+      info += '<b>Sol: ' + nm + '</b><br>';
+    }
+  }
+  if (info) L.popup().setLatLng(ev.latlng).setContent(info + ev.latlng.lat.toFixed(5) + '°N, ' + ev.latlng.lng.toFixed(5) + '°E').openOn(M);
 });
 
 // ──────────── EXPORT ────────────
-function gSeg(){return G?mS(+$('inD').value):[]}
-function dl(c,f,m){var b=new Blob([c],{type:m}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=f;a.click()}
-function eCSV(){var sg=gSeg(),d=$('inD').value,s='lat1,lon1,lat2,lon2,depth\n';sg.forEach(function(x){s+=x[0][0].toFixed(6)+','+x[0][1].toFixed(6)+','+x[1][0].toFixed(6)+','+x[1][1].toFixed(6)+','+d+'\n'});dl(s,'isobath_'+d+'m.csv','text/csv')}
-function eGJ(){var sg=gSeg(),d=$('inD').value;dl(JSON.stringify({type:'FeatureCollection',features:sg.map(function(x){return{type:'Feature',geometry:{type:'LineString',coordinates:[[x[0][1],x[0][0]],[x[1][1],x[1][0]]]},properties:{depth:+d}}})},null,2),'isobath_'+d+'m.geojson','application/json')}
+function gSeg() { return G ? marchingSquares(+$('inD').value) : []; }
+function dl(content, filename, mime) { var b = new Blob([content], { type: mime }), a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = filename; a.click(); }
+function eCSV() {
+  var sg = gSeg(), d = $('inD').value, s = 'lat1,lon1,lat2,lon2,depth\n';
+  sg.forEach(function(x) { s += x[0][0].toFixed(6) + ',' + x[0][1].toFixed(6) + ',' + x[1][0].toFixed(6) + ',' + x[1][1].toFixed(6) + ',' + d + '\n'; });
+  dl(s, 'isobath_' + d + 'm.csv', 'text/csv');
+}
+function eGJ() {
+  var sg = gSeg(), d = $('inD').value;
+  dl(JSON.stringify({ type: 'FeatureCollection', features: sg.map(function(x) {
+    return { type: 'Feature', geometry: { type: 'LineString', coordinates: [[x[0][1], x[0][0]], [x[1][1], x[1][0]]] }, properties: { depth: +d } };
+  }) }, null, 2), 'isobath_' + d + 'm.geojson', 'application/json');
+}
+
+// ──────────── DEPTH CHANGE HANDLER ────────────
+function onDepthChange() {
+  if (!G) { go(); return; }
+  $('lgT').textContent = 'Isobathe ' + (+$('inD').value) + 'm';
+  renderIsobaths();
+  uDSC();
+}
 
 // ──────────── INIT ────────────
-$('inLoc').addEventListener('keyup',function(e){if(e.key==='Enter')go()});
-$('inD').addEventListener('keyup',function(e){if(e.key==='Enter'){if(G){$('lgT').textContent='Isobathe '+(+$('inD').value)+'m';xIso();uDSC();if(LITHO)renderLitho()}else go()}});
-window.addEventListener('resize',uLP);
-T('Entrez un lieu et une profondeur','ok');
+$('inLoc').addEventListener('keyup', function(e) { if (e.key === 'Enter') go(); });
+$('inD').addEventListener('keyup', function(e) { if (e.key === 'Enter') onDepthChange(); });
+window.addEventListener('resize', uLP);
+T('Entrez un lieu et une profondeur', 'ok');
 </script>
 </body>
 </html>
