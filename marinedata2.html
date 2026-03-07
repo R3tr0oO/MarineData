@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Marine Data — Bathymetry, Currents & Sedimentology</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a0e17;--bg2:#111827;--bg3:#1a2236;--accent:#00e5ff;--accent2:#ff3d71;--accent3:#ffc644;--green:#22c55e;--text:#e2e8f0;--text2:#8892a4;--border:#2a3550;--glass:rgba(17,24,39,.92);--r:10px;--pw:370px;--th:64px}
+*{margin:0;padding:0;box-sizing:border-box}html,body{height:100%;overflow:hidden}
+body{font-family:'Instrument Sans',sans-serif;background:var(--bg);color:var(--text)}
+#map{position:absolute;inset:0;z-index:1}
+.tb{position:absolute;top:0;left:0;right:0;z-index:1000;display:flex;align-items:center;gap:10px;padding:10px 14px;height:var(--th);background:linear-gradient(180deg,rgba(10,14,23,.97) 60%,transparent);pointer-events:none}.tb>*{pointer-events:all}
+.logo{font-family:'DM Mono',monospace;font-weight:500;font-size:16px;color:var(--accent);white-space:nowrap;flex-shrink:0}.logo span{color:var(--text2);font-weight:300;font-size:12px}
+.ctrls{display:flex;gap:6px;flex:1;min-width:0}
+.ig{display:flex;align-items:center;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;min-width:0}.ig:focus-within{border-color:var(--accent)}
+.ig label{font-family:'DM Mono',monospace;font-size:10px;color:var(--text2);padding:0 8px;white-space:nowrap;text-transform:uppercase;letter-spacing:.5px;flex-shrink:0}
+.ig input{background:0 0;border:none;color:var(--text);font-family:'Instrument Sans',sans-serif;font-size:13px;padding:9px 8px 9px 0;outline:none;width:100%;min-width:0}
+.ig-l{flex:2.5;min-width:120px}.ig-d{flex:1;min-width:90px}
+.btn{font-family:'DM Mono',monospace;font-size:12px;font-weight:500;padding:9px 14px;border:none;border-radius:var(--r);cursor:pointer;transition:all .15s;white-space:nowrap;flex-shrink:0}
+.btn-go{background:var(--accent);color:var(--bg)}.btn-go:hover{background:#33ecff}.btn-go:disabled{opacity:.4;cursor:not-allowed}
+.btn-m{background:var(--bg3);color:var(--text);border:1px solid var(--border);padding:9px 10px;font-size:16px;line-height:1}
+.pnl{position:absolute;top:var(--th);right:0;bottom:0;width:var(--pw);z-index:1000;background:var(--glass);backdrop-filter:blur(24px);border-left:1px solid var(--border);display:flex;flex-direction:column;transition:transform .3s cubic-bezier(.4,0,.2,1)}.pnl.shut{transform:translateX(100%)}
+.ph{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
+.ph h3{font-size:13px;font-weight:600;color:var(--accent);font-family:'DM Mono',monospace}
+.px{background:0 0;border:none;color:var(--text2);font-size:20px;cursor:pointer;padding:2px 6px;border-radius:6px}
+.ps{flex:1;overflow-y:auto;padding:14px 16px;-webkit-overflow-scrolling:touch}.ps::-webkit-scrollbar{width:3px}.ps::-webkit-scrollbar-thumb{background:var(--border)}
+.sec{font-family:'DM Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text2);margin:16px 0 8px}.sec:first-child{margin-top:0}
+.st{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid rgba(42,53,80,.4)}.sl{font-size:12px;color:var(--text2)}.sv{font-family:'DM Mono',monospace;font-size:12px}
+.pc{padding:9px 11px;margin:5px 0;background:var(--bg3);border-radius:8px;border-left:3px solid var(--accent3);cursor:pointer;transition:all .12s}.pc:hover{background:#1f2d47;transform:translateX(2px)}
+.pc .pn{font-size:12px;font-weight:600}.pc .pd{font-size:10px;color:var(--text2);margin-top:2px;font-family:'DM Mono',monospace}
+.er{display:flex;gap:5px;margin-top:10px}.er .btn{flex:1;font-size:10px;padding:7px 4px;text-align:center;background:var(--bg3);color:var(--text);border:1px solid var(--border)}.er .btn:hover{border-color:var(--accent);color:var(--accent)}
+.ds-card{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:14px;margin:8px 0}
+.ds-card h4{font-size:12px;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.ds-card h4 .badge{font-size:9px;padding:2px 6px;border-radius:4px;font-family:'DM Mono',monospace;font-weight:400}
+.ds-card p{font-size:11px;color:var(--text2);line-height:1.5;margin:4px 0}
+.ds-card .cb{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin:8px 0;font-family:'DM Mono',monospace;font-size:11px;color:var(--accent);cursor:pointer;position:relative;word-break:break-all}.ds-card .cb:hover{border-color:var(--accent)}
+.ds-card .cb .ch{position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:9px;color:var(--text2)}
+.ds-card .cb.cp{border-color:var(--green);color:var(--green)}
+.ds-link{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--accent);text-decoration:none;padding:6px 10px;border:1px solid var(--accent);border-radius:6px;margin:4px 4px 0 0;font-family:'DM Mono',monospace}.ds-link:hover{background:rgba(0,229,255,.1)}
+.ds-steps{margin:8px 0;padding-left:0;list-style:none;counter-reset:step}.ds-steps li{font-size:11px;color:var(--text2);line-height:1.6;padding:3px 0 3px 24px;position:relative;counter-increment:step}
+.ds-steps li::before{content:counter(step);position:absolute;left:0;top:3px;width:18px;height:18px;border-radius:50%;background:var(--bg);border:1px solid var(--border);font-family:'DM Mono',monospace;font-size:9px;display:flex;align-items:center;justify-content:center;color:var(--accent)}
+.drop{border:2px dashed var(--border);border-radius:8px;padding:14px 10px;text-align:center;cursor:pointer;margin:8px 0}.drop:hover,.drop.ov{border-color:var(--accent);background:rgba(0,229,255,.04)}.drop p{font-size:11px;color:var(--text2);margin:2px 0}
+.tst{position:absolute;bottom:14px;left:14px;z-index:1000;background:var(--glass);backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:10px;padding:9px 14px;font-family:'DM Mono',monospace;font-size:11px;color:var(--text2);display:flex;align-items:center;gap:8px;transition:all .3s;max-width:calc(100vw - 28px)}
+.tst.ok{border-color:var(--green);color:var(--green)}.tst.err{border-color:var(--accent2);color:var(--accent2)}.tst.hi{opacity:0;pointer-events:none;transform:translateY(8px)}
+.spn{width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite;flex-shrink:0}@keyframes sp{to{transform:rotate(360deg)}}
+.lgd{position:absolute;bottom:14px;right:14px;z-index:999;background:var(--glass);backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:8px;padding:12px 14px;font-size:11px;min-width:160px;max-height:calc(100vh - 100px);overflow-y:auto}
+.lgd.po{right:calc(var(--pw) + 14px)}
+.lr{display:flex;align-items:center;gap:7px;margin:3px 0}.ll{width:20px;height:3px;border-radius:2px}
+.depth-bar{width:100%;height:12px;border-radius:3px;margin:6px 0 2px}
+.depth-labels{display:flex;justify-content:space-between;font-family:'DM Mono',monospace;font-size:9px;color:var(--text2)}
+.opa-row{display:flex;align-items:center;gap:8px;margin:4px 0}.opa-row label{font-size:9px;color:var(--text2);font-family:'DM Mono',monospace;white-space:nowrap}
+.opa-row input[type=range]{flex:1;height:4px;-webkit-appearance:none;background:var(--border);border-radius:2px;outline:none}
+.opa-row input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:var(--accent);cursor:pointer}
+.lsep{margin-top:8px;border-top:1px solid var(--border);padding-top:8px}
+@media(max-width:768px){:root{--pw:100vw;--th:auto}.tb{flex-wrap:wrap;padding:8px 10px;gap:6px;height:auto}.logo{width:100%;font-size:14px}.logo span{display:none}.ctrls{flex-wrap:wrap}.ig-l{flex:1 1 100%}.ig-d{flex:1}.btn-go{flex:1}.pnl{top:0;width:100vw;border-left:none}.lgd{bottom:8px;right:8px;max-width:180px}.tst{bottom:8px;left:8px;right:8px;max-width:none;font-size:10px}}
+@media(min-width:769px)and(max-width:1100px){:root{--pw:320px}}
+.leaflet-popup-content-wrapper{background:var(--bg2)!important;color:var(--text)!important;border:1px solid var(--border)!important;border-radius:8px!important;font-family:'DM Mono',monospace!important;font-size:11px!important}
+.leaflet-popup-tip{background:var(--bg2)!important}
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div class="tb">
+  <div class="logo">Marine Data <span>// bathymetry · currents · sediments</span></div>
+  <div class="ctrls">
+    <div class="ig ig-l"><label>Lieu</label><input type="text" id="inLoc" placeholder="Suruga Bay, Japan" value="Suruga Bay, Japan"></div>
+    <div class="ig ig-d"><label>Prof</label><input type="number" id="inD" value="651" min="1" max="11000"><label style="padding-right:8px">m</label></div>
+    <button class="btn btn-go" id="btnGo" onclick="go()">Rechercher</button>
+    <button class="btn btn-m" onclick="tp()">☰</button>
+  </div>
+</div>
+
+<div class="pnl shut" id="pnl">
+  <div class="ph"><h3>// DONNÉES</h3><button class="px" onclick="tp()">✕</button></div>
+  <div class="ps">
+    <div class="sec">1 — Données bathymétriques</div>
+    <div id="dsA"><p style="font-size:11px;color:var(--text2)">Cliquez "Rechercher" pour générer les liens.</p></div>
+    <div class="sec">2 — Charger bathymétrie</div>
+    <div class="drop" id="dz"><div style="font-size:20px">📂</div><p>Glisser fichier bathymétrie</p><p style="font-size:10px;opacity:.6">CSV · ASC · XYZ</p></div>
+    <input type="file" id="fIn" accept=".csv,.asc,.xyz" style="display:none">
+    <div class="sec">3 — Courants de fond</div>
+    <div id="dsC"><p style="font-size:11px;color:var(--text2)">Liens après "Rechercher"</p></div>
+    <div class="drop" id="dzC"><div style="font-size:20px">🌊</div><p>Glisser fichier courants</p><p style="font-size:10px;opacity:.6">CSV (lat, lon, u, v)</p></div>
+    <input type="file" id="fInC" accept=".csv" style="display:none">
+    <div class="sec">4 — Lithologie & Sédimentologie</div>
+    <div class="drop" id="dzL"><div style="font-size:20px">🪨</div><p>Glisser fichier sédiments</p><p style="font-size:10px;opacity:.6">CSV (lat, lon, soil_id, label)</p></div>
+    <input type="file" id="fInL" accept=".csv" style="display:none">
+    <div id="rA"></div>
+  </div>
+</div>
+
+<div class="tst hi" id="tst"><div class="spn" id="tSp"></div><span id="tMsg"></span></div>
+
+<div class="lgd" id="lgd" style="display:none">
+  <div class="lr"><div class="ll" style="background:var(--accent2)"></div><span style="color:var(--text2)" id="lgT">Isobathe</span></div>
+  <div class="lr"><div class="ll" style="background:rgba(255,255,255,.3)"></div><span style="color:var(--text2)">Isobathes réf.</span></div>
+  <div class="lr"><div style="width:8px;height:8px;border-radius:50%;background:var(--accent3)"></div><span style="color:var(--text2)">Ports</span></div>
+  <div id="dLeg" style="display:none" class="lsep">
+    <div style="font-size:9px;color:var(--text2);font-family:'DM Mono',monospace;margin-bottom:4px">PROFONDEUR</div>
+    <div class="depth-bar" id="dBar"></div>
+    <div class="depth-labels"><span id="dL0">0m</span><span id="dL1"></span><span id="dL2"></span></div>
+    <div class="opa-row"><label>Opacité</label><input type="range" min="0" max="100" value="60" id="oS" oninput="setOp(+this.value)"></div>
+  </div>
+  <div id="cLeg" style="display:none" class="lsep">
+    <div style="font-size:9px;color:var(--text2);font-family:'DM Mono',monospace;margin-bottom:4px">COURANTS</div>
+    <div class="lr"><div style="font-size:14px">→</div><span style="color:var(--text2);font-size:10px" id="cSpd">—</span></div>
+    <div style="width:100%;height:8px;border-radius:3px;margin:4px 0;background:linear-gradient(90deg,#22c55e,#ffc644,#ff3d71)"></div>
+    <div class="depth-labels"><span>0</span><span id="cSpdMax">— cm/s</span></div>
+    <div class="opa-row"><label>Opacité</label><input type="range" min="0" max="100" value="80" id="oSC" oninput="setCOp(+this.value)"></div>
+  </div>
+  <div id="lLeg" style="display:none" class="lsep">
+    <div style="font-size:9px;color:var(--text2);font-family:'DM Mono',monospace;margin-bottom:4px">SÉDIMENTOLOGIE</div>
+    <div class="lr"><div style="width:14px;height:10px;border-radius:2px;background:rgb(180,100,40)"></div><span style="color:var(--text2);font-size:10px">Roche</span></div>
+    <div class="lr"><div style="width:14px;height:10px;border-radius:2px;background:rgb(230,210,80)"></div><span style="color:var(--text2);font-size:10px">Sable</span></div>
+    <div class="lr"><div style="width:14px;height:10px;border-radius:2px;background:rgb(70,140,70)"></div><span style="color:var(--text2);font-size:10px">Vase</span></div>
+    <div class="lr"><div style="width:14px;height:10px;border-radius:2px;background:rgb(160,120,200)"></div><span style="color:var(--text2);font-size:10px">Argile pélagique</span></div>
+    <div class="lr"><div style="width:14px;height:10px;border-radius:2px;background:rgb(210,140,60)"></div><span style="color:var(--text2);font-size:10px">Séd. turbiditiques</span></div>
+    <div class="lr"><div style="width:14px;height:10px;border-radius:2px;background:rgb(200,60,60)"></div><span style="color:var(--text2);font-size:10px">Séd. volcaniques</span></div>
+    <div class="lr"><div style="width:14px;height:10px;border-radius:2px;background:rgb(60,200,200)"></div><span style="color:var(--text2);font-size:10px">Corail</span></div>
+    <div class="lr"><div style="width:14px;height:10px;border-radius:2px;background:rgb(140,140,140)"></div><span style="color:var(--text2);font-size:10px">Gravier</span></div>
+    <div id="lLegExtra"></div>
+    <div class="opa-row"><label>Opacité</label><input type="range" min="0" max="100" value="55" id="oSL" oninput="setLOp(+this.value)"></div>
+  </div>
+</div>
+
+<script>
+// ──────────── GLOBALS ────────────
+var G=null, IL=null, PM=[], SR=null, PO=false;
+var bathyLayer=null, currLayer=null, lithoLayer=null;
+var CUR=null, LITHO=null;
+var MAX_CELLS=800000;
+
+var SOIL_COL={0:[180,100,40],1:[230,210,80],2:[70,140,70],3:[160,120,200],4:[210,140,60],5:[200,60,60],6:[60,200,200],7:[140,140,140]};
+var SOIL_FB=[100,100,100];
+var CM=[{d:0,r:180,g:238,b:240},{d:50,r:130,g:215,b:230},{d:100,r:80,g:190,b:220},{d:200,r:45,g:150,b:200},{d:500,r:25,g:100,b:180},{d:1000,r:15,g:60,b:150},{d:2000,r:10,g:35,b:110},{d:3000,r:8,g:20,b:80},{d:5000,r:5,g:12,b:55},{d:11000,r:3,g:5,b:30}];
+var HYCOM_D=[0,2,4,6,8,10,12,15,20,25,30,35,40,45,50,60,70,80,90,100,125,150,200,250,300,350,400,500,600,700,800,900,1000,1250,1500,2000,2500,3000,4000,5000];
+var colorLUT=null;
+
+function $(id){return document.getElementById(id)}
+function tick(){return new Promise(function(r){setTimeout(r,20)})}
+function dC(d){if(d<=0)return null;for(var i=1;i<CM.length;i++){if(d<=CM[i].d){var a=CM[i-1],b=CM[i],t=(d-a.d)/(b.d-a.d);return[a.r+(b.r-a.r)*t|0,a.g+(b.g-a.g)*t|0,a.b+(b.b-a.b)*t|0]}}var l=CM[CM.length-1];return[l.r,l.g,l.b]}
+function gCSS(){return'linear-gradient(90deg,'+CM.slice(0,7).map(function(c,i){return'rgb('+c.r+','+c.g+','+c.b+') '+(i/6*100|0)+'%'}).join(',')+')'}
+function bSearch(arr,val){var lo=0,hi=arr.length-1;if(val<=arr[lo])return lo;if(val>=arr[hi])return hi;while(hi-lo>1){var mid=(lo+hi)>>1;if(arr[mid]<=val)lo=mid;else hi=mid;}return(val-arr[lo])<(arr[hi]-val)?lo:hi}
+function snapD(d){var best=HYCOM_D[0],bd=Math.abs(d-best);for(var i=0;i<HYCOM_D.length;i++){var dd=Math.abs(d-HYCOM_D[i]);if(dd<bd){bd=dd;best=HYCOM_D[i]}}return best}
+function hav(a,b,c,d){var R=6371,x=(c-a)*Math.PI/180,y=(d-b)*Math.PI/180,z=Math.sin(x/2)*Math.sin(x/2)+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(y/2)*Math.sin(y/2);return R*2*Math.atan2(Math.sqrt(z),Math.sqrt(1-z))}
+function buildLUT(mx){var n=Math.min(mx+1,12000);colorLUT=new Uint8Array(n*3);for(var d=0;d<n;d++){var c=dC(d);if(c){colorLUT[d*3]=c[0];colorLUT[d*3+1]=c[1];colorLUT[d*3+2]=c[2]}}}
+function T(m,t){var e=$('tst'),s=$('tSp'),x=$('tMsg');e.className='tst';s.style.display=t==='load'?'block':'none';if(t==='ok')e.className='tst ok';if(t==='err')e.className='tst err';x.textContent=m;if(t!=='load')setTimeout(function(){e.className='tst hi'},6000)}
+function tp(){PO=!PO;$('pnl').className=PO?'pnl':'pnl shut';uLP();if(PO)uDS()}
+function op(){PO=true;$('pnl').className='pnl';uLP()}
+function uLP(){$('lgd').className=PO&&window.innerWidth>768?'lgd po':'lgd'}
+
+// ──────────── MAP ────────────
+var M=L.map('map',{center:[34.85,138.55],zoom:10,zoomControl:false});
+L.control.zoom({position:'bottomleft'}).addTo(M);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{attribution:'© CARTO',maxZoom:19}).addTo(M);
+
+// ──────────── GEOCODE ────────────
+function go(){
+  var loc=$('inLoc').value.trim();if(!loc)return T('Entrez un lieu','err');
+  T('Géocodage...','load');$('btnGo').disabled=true;
+  fetch('https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(loc)+'&format=json&limit=1')
+  .then(function(r){return r.json()}).then(function(d){
+    if(!d.length){T('Non trouvé','err');$('btnGo').disabled=false;return}
+    var lat=+d[0].lat,lon=+d[0].lon,bb=d[0].boundingbox.map(Number);
+    var dLa=Math.max(bb[1]-bb[0],.4)*.7,dLo=Math.max(bb[3]-bb[2],.4)*.7;
+    M.fitBounds([[lat-dLa,lon-dLo],[lat+dLa,lon+dLo]]);
+    if(SR)M.removeLayer(SR);
+    SR=L.rectangle([[lat-dLa,lon-dLo],[lat+dLa,lon+dLo]],{color:'#00e5ff',weight:1,fillOpacity:.03,dashArray:'6,4'}).addTo(M);
+    fPorts([lat,lon],Math.max(dLa,dLo));
+    uDS();T('Zone OK — panneau → données','ok');op();$('btnGo').disabled=false;
+  }).catch(function(e){T(e.message,'err');$('btnGo').disabled=false})
+}
+M.on('moveend',function(){if(PO)uDS()});
+
+// ──────────── DATASET LINKS ────────────
+function uDS(){
+  var b=M.getBounds(),s=b.getSouth().toFixed(2),n=b.getNorth().toFixed(2),w=b.getWest().toFixed(2),e=b.getEast().toFixed(2);
+  var cs='Nord:'+n+'° Sud:'+s+'° Ouest:'+w+'° Est:'+e+'°';
+  var eu='https://coastwatch.pfeg.noaa.gov/erddap/griddap/etopo180.csv?altitude[('+s+'):('+n+')][('+w+'):('+e+')]';
+  $('dsA').innerHTML='<div class="ds-card"><h4>🌊 GEBCO <span class="badge" style="background:var(--green);color:var(--bg)">~450m</span></h4><ol class="ds-steps"><li>Ouvrez GEBCO Download</li><li>Coordonnées :</li></ol><div class="cb" onclick="cpy(this,\''+cs+'\')">'+cs+'<span class="ch">copier</span></div><ol class="ds-steps" start="3"><li>Format <b>Esri ASCII</b></li></ol><a class="ds-link" href="https://download.gebco.net/" target="_blank">🔗 GEBCO</a></div><div class="ds-card"><h4>🛰 NOAA ERDDAP <span class="badge" style="background:var(--accent);color:var(--bg)">~1.8km</span></h4><a class="ds-link" href="'+eu+'" target="_blank" download="etopo.csv">⬇ CSV direct</a></div>';
+  uDSC()
+}
+function uDSC(){
+  var dep=+$('inD').value||651,hDep=snapD(dep);
+  var latS,latN,lonW,lonE,src;
+  if(G){latS=G.la[0];latN=G.la[G.nr-1];lonW=G.lo[0];lonE=G.lo[G.nc-1];src='fichier chargé'}
+  else{var b=M.getBounds();latS=b.getSouth();latN=b.getNorth();lonW=b.getWest();lonE=b.getEast();src='vue carte'}
+  var hw=lonW<0?lonW+360:lonW,he=lonE<0?lonE+360:lonE;
+  var hyU='https://www.ncei.noaa.gov/erddap/griddap/HYCOM_reg6_latest3d.csv?water_u[(last)][('+hDep+'.0)][('+latS.toFixed(2)+'):('+latN.toFixed(2)+')][('+hw.toFixed(2)+'):('+he.toFixed(2)+')],water_v[(last)][('+hDep+'.0)][('+latS.toFixed(2)+'):('+latN.toFixed(2)+')][('+hw.toFixed(2)+'):('+he.toFixed(2)+')]';
+  var note=hDep!==dep?' (ajusté '+dep+'→'+hDep+'m)':'';
+  $('dsC').innerHTML='<div class="ds-card"><h4>🌊 HYCOM <span class="badge" style="background:#8b5cf6;color:#fff">'+hDep+'m'+note+'</span></h4><p>Source: '+src+'</p><a class="ds-link" href="'+hyU+'" target="_blank" download="hycom_'+hDep+'m.csv">⬇ CSV</a></div>'
+}
+function cpy(el,t){navigator.clipboard.writeText(t).then(function(){el.className='cb cp';setTimeout(function(){el.className='cb'},2000);T('Copié','ok')}).catch(function(){})}
+
+// ──────────── PORTS ────────────
+function fPorts(c,s){
+  PM.forEach(function(m){M.removeLayer(m)});PM=[];
+  var rad=Math.max(s,.5)*111000;
+  fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:'data='+encodeURIComponent('[out:json][timeout:12];(node["seamark:type"="harbour"](around:'+rad+','+c[0]+','+c[1]+');node["leisure"="marina"](around:'+rad+','+c[0]+','+c[1]+');node["harbour"](around:'+rad+','+c[0]+','+c[1]+'););out center 30;')})
+  .then(function(r){return r.json()}).then(function(d){
+    d.elements.forEach(function(el){
+      var lt=el.lat||el.center&&el.center.lat,ln=el.lon||el.center&&el.center.lon;if(!lt)return;
+      var nm=el.tags&&(el.tags.name||el.tags['seamark:name'])||'Port';
+      PM.push(L.marker([lt,ln],{icon:L.divIcon({html:'<div style="background:#ffc644;width:9px;height:9px;border-radius:50%;border:2px solid #fff"></div>',className:'',iconSize:[13,13],iconAnchor:[6,6]})}).bindPopup('<b>⚓ '+nm+'</b><br>'+lt.toFixed(4)+'°N, '+ln.toFixed(4)+'°E').addTo(M))
+    })
+  }).catch(function(){})
+}
+
+// ──────────── FILE DROP HANDLERS ────────────
+function setupDrop(dzId,fInId,handler){
+  var dz=$(dzId),fi=$(fInId);if(!dz||!fi)return;
+  dz.onclick=function(){fi.click()};
+  dz.ondragover=function(e){e.preventDefault();dz.classList.add('ov')};
+  dz.ondragleave=function(){dz.classList.remove('ov')};
+  dz.ondrop=function(e){e.preventDefault();dz.classList.remove('ov');if(e.dataTransfer.files.length)handler(e.dataTransfer.files[0])};
+  fi.onchange=function(e){if(e.target.files.length)handler(e.target.files[0])};
+}
+setupDrop('dz','fIn',loadBathy);
+setupDrop('dzC','fInC',loadCurr);
+setupDrop('dzL','fInL',loadLitho);
+
+// ──────────── BATHYMETRY ────────────
+async function loadBathy(f){
+  T('Lecture ('+((f.size/1e6)|0)+' Mo)...','load');await tick();
+  try{
+    var t=await f.text();T('Parsing...','load');await tick();
+    if(f.name.toLowerCase().endsWith('.asc'))await parseASC(t);else await parseCSVBathy(t);
+    T('Rendu...','load');await tick();rBathy();xIso();uDSC();
+    if(LITHO)renderLitho();
+  }catch(e){T('Erreur: '+e.message,'err');console.error(e)}
+}
+
+async function parseASC(t){
+  var hdr={},dataStart=0,fl=t.substring(0,2000).split('\n');
+  for(var i=0;i<Math.min(10,fl.length);i++){var p=fl[i].trim().split(/\s+/);if(p.length===2&&isNaN(+p[0])){hdr[p[0].toLowerCase()]=+p[1];dataStart+=fl[i].length+1}else break}
+  var nc=hdr.ncols|0,nr=hdr.nrows|0,x0=hdr.xllcorner!=null?hdr.xllcorner:hdr.xllcenter,y0=hdr.yllcorner!=null?hdr.yllcorner:hdr.yllcenter,cs=hdr.cellsize,nd=hdr.nodata_value!=null?hdr.nodata_value:-9999;
+  if(!nc||!nr||x0==null||y0==null||!cs)throw new Error('ASC invalide');
+  var stride=1;while(Math.ceil(nr/stride)*Math.ceil(nc/stride)>MAX_CELLS)stride++;
+  var gnr=Math.ceil(nr/stride),gnc=Math.ceil(nc/stride);
+  T('ASC '+nr+'×'+nc+' stride='+stride+' → '+gnr+'×'+gnc,'load');await tick();
+  var gr=new Float32Array(gnr*gnc).fill(NaN),gla=new Float64Array(gnr),glo=new Float64Array(gnc);
+  for(i=0;i<gnr;i++)gla[i]=y0+(nr-1-i*stride)*cs;
+  for(i=0;i<gnc;i++)glo[i]=x0+i*stride*cs;
+  var pos=dataStart,row=0,gridRow=0,lp=-1;
+  while(pos<t.length&&row<nr){
+    if(row%stride!==0){while(pos<t.length&&t.charCodeAt(pos)!==10)pos++;pos++;row++;continue}
+    var col=0,gridCol=0;
+    while(pos<t.length&&t.charCodeAt(pos)!==10){
+      while(pos<t.length){var ch=t.charCodeAt(pos);if(ch===32||ch===9||ch===13)pos++;else break}
+      if(pos>=t.length||t.charCodeAt(pos)===10)break;
+      var ns=pos;while(pos<t.length){ch=t.charCodeAt(pos);if(ch===32||ch===9||ch===10||ch===13)break;pos++}
+      if(col%stride===0&&gridCol<gnc){var v=+t.substring(ns,pos);if(v!==nd&&!isNaN(v)&&v<0)gr[gridRow*gnc+gridCol]=-v;gridCol++}
+      col++
+    }
+    if(pos<t.length)pos++;gridRow++;row++;
+    var pct=row/nr*100|0;if(pct%5===0&&pct!==lp){lp=pct;T('ASC '+pct+'%','load');await tick()}
+  }
+  G={la:gla,lo:glo,nr:gnr,nc:gnc,flat:gr};T(gnr+'×'+gnc+' chargé','ok')
+}
+
+async function parseCSVBathy(t){
+  var ls=t.split('\n'),sr=0;
+  if(ls[0]&&/[a-zA-Z]/.test(ls[0])){sr=1;if(ls[1]&&/[a-zA-Z]/.test(ls[1]))sr=2}
+  var stride=1;while(Math.ceil((ls.length-sr)/stride)>MAX_CELLS)stride++;
+  T('CSV stride='+stride,'load');await tick();
+  var latS=new Set,lonS=new Set,raw=[];
+  for(var i=sr;i<ls.length;i+=stride){
+    var p=ls[i].split(/[,;\t\s]+/);if(p.length<3)continue;
+    var a=+p[0],b=+p[1],val=+p[2];if(!isFinite(a)||!isFinite(b)||!isFinite(val))continue;
+    var la,lo;if(Math.abs(a)<=90&&Math.abs(b)>90){la=a;lo=b}else{la=b;lo=a}
+    if(val>=0)continue;raw.push(la,lo,-val);latS.add(la);lonS.add(lo);
+    if(i%50000===0){T('CSV '+((i/ls.length*100)|0)+'%','load');await tick()}
+  }
+  if(!raw.length)throw new Error('Aucun point sous-marin');
+  var sla=[...latS].sort(function(a,b){return a-b}),slo=[...lonS].sort(function(a,b){return a-b});
+  var gnr=sla.length,gnc=slo.length;
+  var laI=new Map,loI=new Map;sla.forEach(function(v,i){laI.set(v,i)});slo.forEach(function(v,i){loI.set(v,i)});
+  var flat=new Float32Array(gnr*gnc).fill(NaN);
+  for(i=0;i<raw.length;i+=3){var ri=laI.get(raw[i]),ci=loI.get(raw[i+1]);if(ri!=null&&ci!=null)flat[ri*gnc+ci]=raw[i+2]}
+  G={la:new Float64Array(sla),lo:new Float64Array(slo),nr:gnr,nc:gnc,flat:flat};T(gnr+'×'+gnc+' chargé','ok')
+}
+
+// ──────────── BATHY RENDERER (tile) ────────────
+function rBathy(){
+  if(!G)return;if(bathyLayer){M.removeLayer(bathyLayer);bathyLayer=null}
+  var maxD=0,flat=G.flat;for(var i=0;i<flat.length;i++){if(flat[i]>maxD)maxD=flat[i]}
+  buildLUT(Math.ceil(maxD));
+  var la=G.la,lo=G.lo,nr=G.nr,nc=G.nc;
+  var BG=L.GridLayer.extend({createTile:function(coords){
+    var tile=document.createElement('canvas'),sz=this.getTileSize();tile.width=sz.x;tile.height=sz.y;
+    var ctx=tile.getContext('2d'),img=ctx.createImageData(sz.x,sz.y);
+    var nw=this._map.unproject([coords.x*sz.x,coords.y*sz.y],coords.z);
+    var se=this._map.unproject([(coords.x+1)*sz.x,(coords.y+1)*sz.y],coords.z);
+    var latN=nw.lat,latS=se.lat,lonW=nw.lng,lonE=se.lng;
+    var r0=bSearch(la,latS),r1=bSearch(la,latN),c0=bSearch(lo,lonW),c1=bSearch(lo,lonE);
+    var rMin=Math.min(r0,r1),rMax=Math.max(r0,r1),cMin=Math.min(c0,c1),cMax=Math.max(c0,c1);
+    if(rMax<=rMin||cMax<=cMin){ctx.putImageData(img,0,0);return tile}
+    for(var r=rMin;r<=rMax;r++){var lat=la[r],py=Math.round((latN-lat)/(latN-latS)*sz.y);if(py<0||py>=sz.y)continue;
+    for(var c=cMin;c<=cMax;c++){var v=flat[r*nc+c];if(isNaN(v)||v<=0)continue;var lon=lo[c],px=Math.round((lon-lonW)/(lonE-lonW)*sz.x);if(px<0||px>=sz.x)continue;
+    var di=v|0,idx=(py*sz.x+px)*4;if(di*3<colorLUT.length){img.data[idx]=colorLUT[di*3];img.data[idx+1]=colorLUT[di*3+1];img.data[idx+2]=colorLUT[di*3+2]}img.data[idx+3]=110}}
+    ctx.putImageData(img,0,0);return tile
+  }});
+  bathyLayer=new BG({opacity:.6,updateWhenZooming:false,updateWhenIdle:true}).addTo(M);
+  bathyLayer.bringToBack();
+  $('dLeg').style.display='block';$('dBar').style.background=gCSS();
+  $('dL0').textContent='0m';$('dL1').textContent=(maxD/2|0)+'m';$('dL2').textContent=(maxD|0)+'m';
+  $('lgT').textContent='Isobathe '+(+$('inD').value)+'m';$('lgd').style.display='block';uLP()
+}
+function setOp(v){if(bathyLayer)bathyLayer.setOpacity(v/100)}
+
+// ──────────── MARCHING SQUARES ────────────
+function mS(th){
+  if(!G)return[];var la=G.la,lo=G.lo,nr=G.nr,nc=G.nc,flat=G.flat,sg=[];
+  for(var r=0;r<nr-1;r++)for(var c=0;c<nc-1;c++){
+    var bl=flat[r*nc+c],br=flat[r*nc+c+1],tl=flat[(r+1)*nc+c],tr=flat[(r+1)*nc+c+1];
+    if(isNaN(tl)||isNaN(tr)||isNaN(br)||isNaN(bl))continue;
+    var cs=0;if(tl>=th)cs|=8;if(tr>=th)cs|=4;if(br>=th)cs|=2;if(bl>=th)cs|=1;if(!cs||cs===15)continue;
+    var yB=la[r],yT=la[r+1],xL=lo[c],xR=lo[c+1];
+    function lp(v1,v2,c1,c2){return Math.abs(v1-v2)<.001?(c1+c2)/2:c1+(th-v1)/(v2-v1)*(c2-c1)}
+    var TT=[yT,lp(tl,tr,xL,xR)],B=[yB,lp(bl,br,xL,xR)],Le=[lp(bl,tl,yB,yT),xL],R=[lp(br,tr,yB,yT),xR];
+    switch(cs){case 1:case 14:sg.push([Le,B]);break;case 2:case 13:sg.push([B,R]);break;case 3:case 12:sg.push([Le,R]);break;case 4:case 11:sg.push([TT,R]);break;case 5:sg.push([Le,TT],[B,R]);break;case 6:case 9:sg.push([TT,B]);break;case 7:case 8:sg.push([Le,TT]);break;case 10:sg.push([Le,B],[TT,R]);break}
+  }return sg
+}
+
+// ──────────── ISOBATH EXTRACT ────────────
+function xIso(){
+  if(!G)return;var dep=+$('inD').value;
+  if(IL)M.removeLayer(IL);IL=L.layerGroup().addTo(M);
+  var sg=mS(dep);sg.forEach(function(s){L.polyline(s,{color:'#ff3d71',weight:3.5,opacity:1}).addTo(IL)});
+  var ctr=M.getCenter();
+  [50,100,200,500,1000,1500,2000,3000,5000].forEach(function(d){
+    if(d===dep)return;var rs=mS(d);if(!rs.length)return;
+    rs.forEach(function(s){L.polyline(s,{color:'rgba(255,255,255,.3)',weight:1,dashArray:'3,5'}).addTo(IL)});
+    var best=rs[0],bd=1e9;rs.forEach(function(s){var dd=Math.abs((s[0][0]+s[1][0])/2-ctr.lat)+Math.abs((s[0][1]+s[1][1])/2-ctr.lng);if(dd<bd){bd=dd;best=s}});
+    L.marker([(best[0][0]+best[1][0])/2,(best[0][1]+best[1][1])/2],{icon:L.divIcon({html:'<div style="font:500 9px DM Mono,monospace;color:rgba(255,255,255,.55);text-shadow:0 0 4px #000">'+d+'m</div>',className:'',iconSize:[40,14],iconAnchor:[20,7]})}).addTo(IL)
+  });
+  sRes(dep,sg);T('Isobathe '+dep+'m : '+sg.length+' segments','ok')
+}
+
+function sRes(dep,sg){
+  if(!sg.length){$('rA').innerHTML='<p style="color:var(--accent2);font-size:12px;margin-top:12px">Aucune isobathe.</p>';return}
+  var allLa=[],allLo=[];sg.forEach(function(s){allLa.push(s[0][0],s[1][0]);allLo.push(s[0][1],s[1][1])});
+  var laMin=Math.min.apply(null,allLa),laMax=Math.max.apply(null,allLa),loMin=Math.min.apply(null,allLo),loMax=Math.max.apply(null,allLo);
+  var cLa=(laMin+laMax)/2,cLo=(loMin+loMax)/2;
+  var h='<div class="sec">Isobathe '+dep+'m</div><div class="st"><span class="sl">Segments</span><span class="sv">'+sg.length+'</span></div><div class="st"><span class="sl">Lat</span><span class="sv">'+laMin.toFixed(4)+'° → '+laMax.toFixed(4)+'°</span></div><div class="st"><span class="sl">Lon</span><span class="sv">'+loMin.toFixed(4)+'° → '+loMax.toFixed(4)+'°</span></div>';
+  if(PM.length){h+='<div class="sec">Ports</div>';
+  PM.map(function(m){var ll=m.getLatLng(),nm=(m.getPopup().getContent().match(/<b>⚓ (.+?)<\/b>/)||[])[1]||'Port';return{name:nm,lat:ll.lat,lon:ll.lng,dist:hav(ll.lat,ll.lng,cLa,cLo)}}).sort(function(a,b){return a.dist-b.dist}).slice(0,6).forEach(function(p){h+='<div class="pc" onclick="M.setView(['+p.lat+','+p.lon+'],13)"><div class="pn">⚓ '+p.name+'</div><div class="pd">'+p.dist.toFixed(1)+'km</div></div>'})}
+  h+='<div class="sec">Export</div><div class="er"><button class="btn" onclick="eCSV()">CSV</button><button class="btn" onclick="eGJ()">GeoJSON</button></div>';$('rA').innerHTML=h
+}
+
+// ──────────── CURRENTS ────────────
+async function loadCurr(f){
+  T('Courants...','load');await tick();
+  try{var t=await f.text();parseCurrCSV(t);renderCurr();T(CUR.nr+'×'+CUR.nc+' vecteurs','ok')}catch(e){T('Erreur: '+e.message,'err')}
+}
+function parseCurrCSV(t){
+  var ls=t.split('\n'),sr=0;if(ls[0]&&/[a-zA-Z]/.test(ls[0])){sr=1;if(ls[1]&&/[a-zA-Z]/.test(ls[1]))sr=2}
+  var latS=new Set,lonS=new Set,raw=[];
+  for(var i=sr;i<ls.length;i++){
+    var p=ls[i].split(/[,;\t]+/);var lat,lon,u,v;
+    if(p.length>=6){lat=+p[2];lon=+p[3];u=+p[4];v=+p[5]}else if(p.length>=4){lat=+p[0];lon=+p[1];u=+p[2];v=+p[3]}else continue;
+    if(!isFinite(lat)||!isFinite(lon)||!isFinite(u)||!isFinite(v)||isNaN(u)||isNaN(v))continue;
+    if(lon>180)lon-=360;latS.add(lat);lonS.add(lon);raw.push(lat,lon,u,v)
+  }
+  if(!raw.length)throw new Error('Aucune donnée');
+  var la=[...latS].sort(function(a,b){return a-b}),lo=[...lonS].sort(function(a,b){return a-b});
+  var nr=la.length,nc=lo.length,laI=new Map,loI=new Map;
+  la.forEach(function(v,i){laI.set(v,i)});lo.forEach(function(v,i){loI.set(v,i)});
+  var uA=new Float32Array(nr*nc).fill(NaN),vA=new Float32Array(nr*nc).fill(NaN);
+  for(i=0;i<raw.length;i+=4){var ri=laI.get(raw[i]),ci=loI.get(raw[i+1]);if(ri!=null&&ci!=null){uA[ri*nc+ci]=raw[i+2];vA[ri*nc+ci]=raw[i+3]}}
+  CUR={lats:new Float64Array(la),lons:new Float64Array(lo),u:uA,v:vA,nr:nr,nc:nc}
+}
+function renderCurr(){
+  if(!CUR)return;if(currLayer){M.removeLayer(currLayer);currLayer=null}
+  var lats=CUR.lats,lons=CUR.lons,u=CUR.u,v=CUR.v,nr=CUR.nr,nc=CUR.nc;
+  var maxSpd=0;for(var i=0;i<u.length;i++){if(isNaN(u[i]))continue;var s=Math.sqrt(u[i]*u[i]+v[i]*v[i]);if(s>maxSpd)maxSpd=s}
+  var CG=L.GridLayer.extend({createTile:function(coords){
+    var tile=document.createElement('canvas'),sz=this.getTileSize();tile.width=sz.x;tile.height=sz.y;var ctx=tile.getContext('2d');
+    var nw=this._map.unproject([coords.x*sz.x,coords.y*sz.y],coords.z),se=this._map.unproject([(coords.x+1)*sz.x,(coords.y+1)*sz.y],coords.z);
+    var latN=nw.lat,latS=se.lat,lonW=nw.lng,lonE=se.lng;
+    var r0=bSearch(lats,latS),r1=bSearch(lats,latN),c0=bSearch(lons,lonW),c1=bSearch(lons,lonE);
+    var rMin=Math.min(r0,r1),rMax=Math.max(r0,r1),cMin=Math.min(c0,c1),cMax=Math.max(c0,c1);
+    var rStep=Math.max(1,Math.ceil((rMax-rMin)/15)),cStep=Math.max(1,Math.ceil((cMax-cMin)/15));
+    for(var r=rMin;r<=rMax;r+=rStep)for(var c=cMin;c<=cMax;c+=cStep){
+      var ui=u[r*nc+c],vi=v[r*nc+c];if(isNaN(ui)||isNaN(vi))continue;
+      var spd=Math.sqrt(ui*ui+vi*vi);if(spd<.001)continue;
+      var lat=lats[r],lon=lons[c],px=((lon-lonW)/(lonE-lonW))*sz.x,py=((latN-lat)/(latN-latS))*sz.y;
+      var angle=Math.atan2(-vi,ui),len=Math.min(8+spd/maxSpd*25,35),t=Math.min(spd/maxSpd,1);
+      var cr=t<.5?34+t*2*221:255,cg=t<.5?197:197-(t-.5)*2*136,cb=t<.5?94+t*2*6:100-(t-.5)*2*32;
+      ctx.save();ctx.translate(px,py);ctx.rotate(angle);ctx.strokeStyle='rgb('+Math.round(cr)+','+Math.round(cg)+','+Math.round(cb)+')';
+      ctx.lineWidth=spd/maxSpd*2+1;ctx.globalAlpha=.85;ctx.beginPath();ctx.moveTo(-len/2,0);ctx.lineTo(len/2,0);ctx.stroke();
+      ctx.fillStyle=ctx.strokeStyle;ctx.beginPath();ctx.moveTo(len/2+4,0);ctx.lineTo(len/2-3,-4);ctx.lineTo(len/2-3,4);ctx.fill();ctx.restore()
+    }
+    return tile
+  }});
+  currLayer=new CG({opacity:.8,updateWhenZooming:false,updateWhenIdle:true}).addTo(M);
+  $('cLeg').style.display='block';$('cSpd').textContent='Max: '+(maxSpd*100).toFixed(1)+' cm/s';$('cSpdMax').textContent=(maxSpd*100|0)+' cm/s'
+}
+function setCOp(v){if(currLayer)currLayer.setOpacity(v/100)}
+
+// ──────────── LITHOLOGY ────────────
+async function loadLitho(f){
+  if(!G){T('Chargez la bathymétrie d\'abord','err');return}
+  T('Sédiments ('+((f.size/1e6)|0)+' Mo)...','load');await tick();
+  try{var t=await f.text();await parseLitho(t);renderLitho();T(LITHO.nr+'×'+LITHO.nc+' cellules','ok')}catch(e){T('Erreur: '+e.message,'err')}
+}
+async function parseLitho(t){
+  var ls=t.split('\n'),sr=0;if(ls[0]&&/[a-zA-Z]/.test(ls[0]))sr=1;
+  var stride=1;while(Math.ceil((ls.length-sr)/stride)>MAX_CELLS)stride++;
+  T('Litho stride='+stride,'load');await tick();
+  var colLat=0,colLon=1,colId=2,colLabel=3;
+  if(sr>0){var hdr=ls[0].toLowerCase().split(',');hdr.forEach(function(h,i){h=h.trim();if(h==='lat'||h==='latitude')colLat=i;if(h==='lon'||h==='longitude')colLon=i;if(h==='soil_id'||h==='type_id'||h==='id')colId=i;if(h==='label'||h==='type'||h==='name')colLabel=i})}
+  var latS=new Set,lonS=new Set,raw=[],labels={};
+  for(var i=sr;i<ls.length;i+=stride){
+    var p=ls[i].split(',');if(p.length<3)continue;
+    var lat=+p[colLat],lon=+p[colLon],sid=parseInt(p[colId]);
+    if(!isFinite(lat)||!isFinite(lon)||isNaN(sid))continue;
+    latS.add(lat);lonS.add(lon);raw.push(lat,lon,sid);
+    if(p[colLabel]&&!labels[sid])labels[sid]=p[colLabel].trim();
+    if(i%100000===0){T('Litho '+((i/ls.length*100)|0)+'%','load');await tick()}
+  }
+  if(!raw.length)throw new Error('Aucune donnée');
+  var la=[...latS].sort(function(a,b){return a-b}),lo=[...lonS].sort(function(a,b){return a-b});
+  var nr=la.length,nc=lo.length,laI=new Map,loI=new Map;
+  la.forEach(function(v,i){laI.set(v,i)});lo.forEach(function(v,i){loI.set(v,i)});
+  var grid=new Uint8Array(nr*nc).fill(255);
+  for(i=0;i<raw.length;i+=3){var ri=laI.get(raw[i]),ci=loI.get(raw[i+1]);if(ri!=null&&ci!=null)grid[ri*nc+ci]=raw[i+2]}
+  LITHO={lats:new Float64Array(la),lons:new Float64Array(lo),grid:grid,nr:nr,nc:nc,labels:labels}
+}
+function renderLitho() {
+  if (!LITHO || !G) return;
+  if (lithoLayer) { M.removeLayer(lithoLayer); lithoLayer = null; }
+
+  var dep = +$('inD').value || 651, band = 50, depMin = dep - band, depMax = dep + band;
+  var lLa = LITHO.lats, lLo = LITHO.lons, lGr = LITHO.grid, lNr = LITHO.nr, lNc = LITHO.nc;
+  var bLa = G.la, bLo = G.lo, bNc = G.nc, bFlat = G.flat;
+  var dLat = lNr > 1 ? Math.abs(lLa[1] - lLa[0]) / 2 : 0.01;
+  var dLon = lNc > 1 ? Math.abs(lLo[1] - lLo[0]) / 2 : 0.01;
+
+  var LG = L.GridLayer.extend({
+    createTile: function (coords) {
+      var tile = document.createElement('canvas');
+      var sz = this.getTileSize();
+      tile.width = sz.x;
+      tile.height = sz.y;
+      var ctx = tile.getContext('2d');
+
+      var nw = this._map.unproject([coords.x * sz.x, coords.y * sz.y], coords.z);
+      var se = this._map.unproject([(coords.x + 1) * sz.x, (coords.y + 1) * sz.y], coords.z);
+      var latN = nw.lat, latS = se.lat, lonW = nw.lng, lonE = se.lng;
+      var latSpan = latN - latS, lonSpan = lonE - lonW;
+      if (latSpan <= 0 || lonSpan <= 0) return tile;
+
+      var r0 = bSearch(lLa, latS - dLat);
+      var r1 = bSearch(lLa, latN + dLat);
+      var c0 = bSearch(lLo, lonW - dLon);
+      var c1 = bSearch(lLo, lonE + dLon);
+      var rMin = Math.max(0, Math.min(r0, r1));
+      var rMax = Math.min(lNr - 1, Math.max(r0, r1));
+      var cMin = Math.max(0, Math.min(c0, c1));
+      var cMax = Math.min(lNc - 1, Math.max(c0, c1));
+
+      if (rMax < rMin || cMax < cMin) return tile;
+
+      var cellH = Math.max(2, Math.ceil(dLat * 2 * (sz.y / latSpan)) + 1);
+      var cellW = Math.max(2, Math.ceil(dLon * 2 * (sz.x / lonSpan)) + 1);
+
+      ctx.globalAlpha = 0.85;
+
+      for (var r = rMin; r <= rMax; r++) {
+        var lat = lLa[r];
+        for (var c = cMin; c <= cMax; c++) {
+          var id = lGr[r * lNc + c];
+          if (id === 255) continue;
+
+          var lon = lLo[c];
+          var px = (lon - lonW) / lonSpan * sz.x;
+          var py = (latN - lat) / latSpan * sz.y;
+          if (px < -cellW || px > sz.x + cellW || py < -cellH || py > sz.y + cellH) continue;
+
+          var col = SOIL_COL[id] || SOIL_FB;
+          ctx.fillStyle = 'rgb(' + col[0] + ',' + col[1] + ',' + col[2] + ')';
+          ctx.fillRect(px - cellW / 2, py - cellH / 2, cellW, cellH);
+        }
+      }
+      return tile;
+    }
+  });
+
+  lithoLayer = new LG({ opacity: 0.65, updateWhenZooming: false, updateWhenIdle: true }).addTo(M);
+  $('lLeg').style.display = 'block';
+  $('lLegExtra').innerHTML = '<div style="font-size:9px;color:var(--accent);margin:4px 0;font-family:DM Mono,monospace">Zone: ' + depMin + 'm → ' + depMax + 'm</div>';
+  $('lgd').style.display = 'block';
+  uLP();
+}
+function setLOp(v){if(lithoLayer)lithoLayer.setOpacity(v/100)}
+
+// ──────────── CLICK ────────────
+M.on('click',function(ev){
+  var info='';
+  if(G){var r=bSearch(G.la,ev.latlng.lat),c=bSearch(G.lo,ev.latlng.lng),v=G.flat[r*G.nc+c];if(v&&!isNaN(v)&&v>0)info+='<b>Prof: '+v.toFixed(0)+'m</b><br>'}
+  if(LITHO){var r2=bSearch(LITHO.lats,ev.latlng.lat),c2=bSearch(LITHO.lons,ev.latlng.lng),sid=LITHO.grid[r2*LITHO.nc+c2];if(sid!==255){var nm=LITHO.labels[sid]||('Type '+sid);info+='<b>Sol: '+nm+'</b><br>'}}
+  if(info)L.popup().setLatLng(ev.latlng).setContent(info+ev.latlng.lat.toFixed(5)+'°N, '+ev.latlng.lng.toFixed(5)+'°E').openOn(M)
+});
+
+// ──────────── EXPORT ────────────
+function gSeg(){return G?mS(+$('inD').value):[]}
+function dl(c,f,m){var b=new Blob([c],{type:m}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=f;a.click()}
+function eCSV(){var sg=gSeg(),d=$('inD').value,s='lat1,lon1,lat2,lon2,depth\n';sg.forEach(function(x){s+=x[0][0].toFixed(6)+','+x[0][1].toFixed(6)+','+x[1][0].toFixed(6)+','+x[1][1].toFixed(6)+','+d+'\n'});dl(s,'isobath_'+d+'m.csv','text/csv')}
+function eGJ(){var sg=gSeg(),d=$('inD').value;dl(JSON.stringify({type:'FeatureCollection',features:sg.map(function(x){return{type:'Feature',geometry:{type:'LineString',coordinates:[[x[0][1],x[0][0]],[x[1][1],x[1][0]]]},properties:{depth:+d}}})},null,2),'isobath_'+d+'m.geojson','application/json')}
+
+// ──────────── INIT ────────────
+$('inLoc').addEventListener('keyup',function(e){if(e.key==='Enter')go()});
+$('inD').addEventListener('keyup',function(e){if(e.key==='Enter'){if(G){$('lgT').textContent='Isobathe '+(+$('inD').value)+'m';xIso();uDSC();if(LITHO)renderLitho()}else go()}});
+window.addEventListener('resize',uLP);
+T('Entrez un lieu et une profondeur','ok');
+</script>
+</body>
+</html>
