@@ -1,7 +1,0 @@
-  for(var i=sr;i<ls.length;i+=stride){
-    var p=ls[i].split(',');if(p.length<3)continue;
-    var lat=+p[colLat],lon=+p[colLon],sid=parseInt(p[colId]);
-    if(!isFinite(lat)||!isFinite(lon)||isNaN(sid))continue;
-    latS.add(lat);lonS.add(lon);raw.push(lat,lon,sid);
-    if(p[colLabel]&&!labels[sid])labels[sid]=p[colLabel].trim();
-    if(i%100000===0){T('Litho '+((i/ls.length*100)|0)+'%','load');await tick()}
