@@ -2912,6 +2912,17 @@ function uTrnOffset() {
 // ──────────── INIT ────────────
 $('inLoc').addEventListener('keyup', function(e) { if (e.key === 'Enter') go(); });
 $('inD').addEventListener('keyup', function(e) { if (e.key === 'Enter') onDepthChange(); });
+$('inD').addEventListener('change', function() { onDepthChange(); });
+var _depthTimer = null;
+$('inD').addEventListener('input', function() {
+  var v = +$('inD').value;
+  $('lgT').textContent = 'Isobathe ' + v + 'm';
+  uDSC();
+  clearTimeout(_depthTimer);
+  _depthTimer = setTimeout(function() {
+    if (G) renderIsobaths();
+  }, 400);
+});
 window.addEventListener('resize', uLP);
 uLP(); uDS();
 T('Entrez un lieu et une profondeur', 'ok');
