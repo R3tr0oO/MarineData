@@ -43,6 +43,30 @@ body{font-family:'Instrument Sans',sans-serif;background:var(--bg);color:var(--t
 .ds-link{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--accent);text-decoration:none;padding:6px 10px;border:1px solid var(--accent);border-radius:6px;margin:4px 4px 0 0;font-family:'DM Mono',monospace}.ds-link:hover{background:rgba(0,229,255,.1)}
 .ds-steps{margin:8px 0;padding-left:0;list-style:none;counter-reset:step}.ds-steps li{font-size:11px;color:var(--text2);line-height:1.6;padding:3px 0 3px 24px;position:relative;counter-increment:step}
 .ds-steps li::before{content:counter(step);position:absolute;left:0;top:3px;width:18px;height:18px;border-radius:50%;background:var(--bg);border:1px solid var(--border);font-family:'DM Mono',monospace;font-size:9px;display:flex;align-items:center;justify-content:center;color:var(--accent)}
+.dl-btn{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;padding:8px 0;margin-top:8px;border-radius:7px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;transition:background .15s}.dl-btn:hover:not(:disabled){background:rgba(0,229,255,.12)}.dl-btn:disabled{opacity:.5;cursor:not-allowed}
+.dl-btn.green{border-color:var(--green);color:var(--green)}.dl-btn.green:hover:not(:disabled){background:rgba(0,224,160,.12)}
+.dl-btn.purple{border-color:#a78bfa;color:#a78bfa}.dl-btn.purple:hover:not(:disabled){background:rgba(167,139,250,.12)}
+.bbox-row{display:flex;gap:4px;flex-wrap:wrap;margin:8px 0}
+.bbox-chip{flex:1;min-width:80px;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:4px 6px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2);text-align:center}
+.bbox-chip b{display:block;color:var(--accent);font-size:11px}
+.info-section{margin-bottom:28px}
+.info-title{font-family:'DM Mono',monospace;font-size:13px;font-weight:700;color:var(--fg);margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.info-fmt{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:10px}
+.info-fmt-head{font-size:12px;font-weight:600;color:var(--fg);margin-bottom:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.info-badge{font-size:9px;padding:2px 7px;border-radius:4px;font-family:'DM Mono',monospace;font-weight:400}
+.info-badge.green{background:var(--green);color:#0a0f1e}
+.info-badge.blue{background:var(--accent);color:#0a0f1e}
+.info-desc{font-size:11px;color:var(--text2);margin:0 0 10px;line-height:1.6}
+.info-rule{font-size:10px;color:var(--accent);font-family:'DM Mono',monospace;margin:8px 0 4px;text-transform:uppercase;letter-spacing:.06em}
+.info-cols{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px;margin:6px 0 10px}
+.info-col{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-family:'DM Mono',monospace}
+.info-col b{display:block;font-size:11px;color:var(--accent);margin-bottom:2px}
+.info-col span{font-size:10px;color:var(--text2)}
+.info-list{margin:4px 0 8px;padding-left:16px;font-size:11px;color:var(--text2);line-height:1.7}
+.info-list li{margin-bottom:2px}
+.info-list code{background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:1px 4px;font-family:'DM Mono',monospace;font-size:10px;color:var(--accent)}
+.info-example{background:#0a0f1e;border:1px solid var(--border);border-radius:6px;padding:10px 12px;font-family:'DM Mono',monospace;font-size:10px;color:#a8d8a8;white-space:pre;overflow-x:auto;margin:6px 0;line-height:1.6}
+.info-cmt{color:#4a5568}
 .drop{border:2px dashed var(--border);border-radius:8px;padding:14px 10px;text-align:center;cursor:pointer;margin:8px 0}.drop:hover,.drop.ov{border-color:var(--accent);background:rgba(0,229,255,.04)}.drop p{font-size:11px;color:var(--text2);margin:2px 0}
 .tst{position:absolute;bottom:14px;left:14px;z-index:1000;background:var(--glass);backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:10px;padding:9px 14px;font-family:'DM Mono',monospace;font-size:11px;color:var(--text2);display:flex;align-items:center;gap:8px;transition:all .3s;max-width:calc(100vw - 28px)}
 .tst.ok{border-color:var(--green);color:var(--green)}.tst.err{border-color:var(--accent2);color:var(--accent2)}.tst.hi{opacity:0;pointer-events:none;transform:translateY(8px)}
@@ -163,6 +187,7 @@ body{font-family:'Instrument Sans',sans-serif;background:var(--bg);color:var(--t
     <button class="sel-btn" id="expBtn" onclick="exportPNG()" title="Exporter en PNG">📷</button>
     <button class="sel-btn" onclick="exportProject()" title="Sauvegarder projet">💾</button>
     <button class="sel-btn" onclick="$('fInProj').click()" title="Charger projet">📁</button>
+    <button class="sel-btn" onclick="toggleInfo()" title="Formats de fichiers">ℹ</button>
     <input type="file" id="fInProj" accept=".geojson,.json" style="display:none" onchange="if(this.files.length)importProject(this.files[0])">
     <div class="layer-wrap">
       <button class="layer-btn" id="layerBtn" onclick="switchLayer()" title="Changer fond de carte">🛰</button>
@@ -188,16 +213,22 @@ body{font-family:'Instrument Sans',sans-serif;background:var(--bg);color:var(--t
 <div class="pnl shut" id="pnl">
   <div class="ph"><h3>// DONNÉES</h3><button class="px" onclick="tp()">✕</button></div>
   <div class="ps">
-    <div class="sec">1 — Données bathymétriques</div>
-    <div id="dsA"><p style="font-size:11px;color:var(--text2)">Cliquez "Rechercher" pour générer les liens.</p></div>
+    <div class="sec">1 — Téléchargement bathymétrie</div>
+    <div id="dsA"><p style="font-size:11px;color:var(--text2)">Positionnez la carte pour définir la zone.</p></div>
     <div class="sec">2 — Charger bathymétrie</div>
     <div class="drop" id="dz"><div style="font-size:20px">📂</div><p>Glisser fichier bathymétrie</p><p style="font-size:10px;opacity:.6">CSV · ASC · XYZ</p></div>
     <input type="file" id="fIn" accept=".csv,.asc,.xyz" style="display:none">
-    <div class="sec">3 — Courants de fond</div>
-    <div id="dsC"><p style="font-size:11px;color:var(--text2)">Liens après "Rechercher"</p></div>
+    <div class="sec">3 — Téléchargement courants</div>
+    <div id="dsC"><p style="font-size:11px;color:var(--text2)">Positionnez la carte pour définir la zone.</p></div>
     <div class="drop" id="dzC"><div style="font-size:20px">🌊</div><p>Glisser fichier courants</p><p style="font-size:10px;opacity:.6">CSV (lat, lon, u, v)</p></div>
     <input type="file" id="fInC" accept=".csv" style="display:none">
     <div class="sec">4 — Lithologie & Sédimentologie</div>
+    <div class="ds-card">
+      <h4>🪨 EarthByte Seafloor Lithology <span class="badge" style="background:#f59e0b;color:#000">global</span></h4>
+      <p>Base de données mondiale de lithologie des fonds marins (Dutkiewicz et al.).</p>
+      <p style="font-size:10px;color:var(--text2)">⚠ Format NetCDF (.nc) — fichier ~200 Mo.</p>
+      <button class="dl-btn" style="border-color:#f59e0b;color:#f59e0b" onclick="dlLitho()">🔗 Télécharger seabed_lithology_v1.nc</button>
+    </div>
     <div class="drop" id="dzL"><div style="font-size:20px">🪨</div><p>Glisser fichier sédiments</p><p style="font-size:10px;opacity:.6">CSV (lat, lon, soil_id, label)</p></div>
     <input type="file" id="fInL" accept=".csv" style="display:none">
     <div id="rA"></div>
@@ -271,6 +302,167 @@ body{font-family:'Instrument Sans',sans-serif;background:var(--bg);color:var(--t
     <div style="width:100%;height:10px;border-radius:3px;margin:4px 0;background:linear-gradient(90deg,rgba(255,255,255,0) 0%,rgba(255,255,255,.15) 25%,rgba(220,225,235,.4) 50%,rgba(200,205,215,.65) 75%,rgba(180,185,195,.85) 100%)"></div>
     <div class="depth-labels"><span>0%</span><span id="wxLegTime">—</span><span>100%</span></div>
     <div class="opa-row"><label>Opacité</label><input type="range" min="0" max="100" value="70" id="oSW" oninput="setCloudOp(+this.value)"></div>
+  </div>
+</div>
+
+<div id="infoOverlay" onclick="if(event.target===this)toggleInfo()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9000;overflow-y:auto;padding:20px;box-sizing:border-box">
+  <div style="max-width:760px;margin:0 auto;background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:28px 32px;position:relative">
+    <button onclick="toggleInfo()" style="position:absolute;top:16px;right:16px;background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer">✕</button>
+    <h2 style="margin:0 0 6px;font-size:18px;color:var(--accent);font-family:'DM Mono',monospace;letter-spacing:.04em">// FORMATS DE FICHIERS</h2>
+    <p style="font-size:12px;color:var(--text2);margin:0 0 24px">Guide de référence pour préparer vos données avant chargement dans l'application.</p>
+
+    <div class="info-section">
+      <div class="info-title">📂 Bathymétrie — 3 formats acceptés</div>
+      <div class="info-fmt">
+        <div class="info-fmt-head">Format 1 · CSV / XYZ <span class="info-badge green">recommandé</span></div>
+        <p class="info-desc">Tableau de valeurs séparées par virgule, point-virgule ou tabulation. Chaque ligne = un point de mesure.</p>
+        <div class="info-rule">Colonnes requises (dans n'importe quel ordre) :</div>
+        <div class="info-cols">
+          <div class="info-col"><b>latitude</b><span>décimal · ex : 34.85</span></div>
+          <div class="info-col"><b>longitude</b><span>décimal · ex : 138.55</span></div>
+          <div class="info-col"><b>profondeur</b><span>valeur positive en mètres</span></div>
+        </div>
+        <div class="info-rule">Règles :</div>
+        <ul class="info-list">
+          <li>1 ligne d'en-tête optionnelle (ignorée automatiquement si elle contient des lettres)</li>
+          <li>Profondeur en valeur <b>positive</b> — ex : <code>2400</code> et non <code>-2400</code></li>
+          <li>Séparateur accepté : virgule <code>,</code> · point-virgule <code>;</code> · tabulation <code>\t</code> · espace</li>
+          <li>Taille max recommandée : 500 000 points (l'app sous-échantillonne automatiquement si dépassé)</li>
+          <li>Encodage UTF-8 ou ASCII</li>
+        </ul>
+        <div class="info-example"><span class="info-cmt"># exemple valide</span>
+lat,lon,depth
+34.85,138.55,1200
+34.86,138.56,1350
+34.84,138.54,980</div>
+      </div>
+
+      <div class="info-fmt">
+        <div class="info-fmt-head">Format 2 · ASC (Esri ASCII Grid) <span class="info-badge blue">GEBCO</span></div>
+        <p class="info-desc">Format grille raster exporté par GEBCO, QGIS ou ArcGIS. Extension <code>.asc</code>. Contient un en-tête de métadonnées suivi des données.</p>
+        <div class="info-rule">Structure attendue :</div>
+        <div class="info-example">ncols        3601
+nrows        3001
+xllcorner    135.0
+yllcorner    32.0
+cellsize     0.01
+nodata_value -9999
+0 0 -200 -450 -800 ...</div>
+        <div class="info-rule">Règles :</div>
+        <ul class="info-list">
+          <li>Mots-clés d'en-tête : <code>ncols</code>, <code>nrows</code>, <code>xllcorner</code> / <code>xllcenter</code>, <code>yllcorner</code> / <code>yllcenter</code>, <code>cellsize</code></li>
+          <li><code>nodata_value</code> optionnel (défaut : -9999)</li>
+          <li>Valeurs de profondeur : <b>négatives</b> pour l'océan — l'app les convertit automatiquement en positif</li>
+          <li>Origine <code>xll/yll</code> = coin bas-gauche en degrés décimaux WGS84</li>
+          <li>Sur GEBCO Download → choisir le format : <b>Esri ASCII Raster (.asc)</b></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="info-section">
+      <div class="info-title">🌊 Courants océaniques — Format CSV</div>
+      <div class="info-fmt">
+        <div class="info-fmt-head">Format CSV u/v <span class="info-badge green">requis</span></div>
+        <p class="info-desc">Chaque ligne représente un point de grille avec les deux composantes de vitesse horizontale.</p>
+        <div class="info-rule">Colonnes requises :</div>
+        <div class="info-cols">
+          <div class="info-col"><b>lat</b><span>latitude décimale</span></div>
+          <div class="info-col"><b>lon</b><span>longitude décimale</span></div>
+          <div class="info-col"><b>u</b><span>vitesse Est–Ouest (m/s)</span></div>
+          <div class="info-col"><b>v</b><span>vitesse Nord–Sud (m/s)</span></div>
+        </div>
+        <div class="info-rule">Règles :</div>
+        <ul class="info-list">
+          <li>Unités u et v : <b>mètres par seconde (m/s)</b> — l'app affiche en cm/s automatiquement</li>
+          <li>1 ou 2 lignes d'en-tête tolérées</li>
+          <li>Les valeurs <code>NaN</code>, vides ou nulles sont ignorées</li>
+          <li>Grille régulière recommandée mais non obligatoire</li>
+          <li>Longitude en −180/180 ou 0/360, les deux sont acceptés</li>
+        </ul>
+        <div class="info-example"><span class="info-cmt"># exemple valide</span>
+lat,lon,water_u,water_v
+34.0,138.0,0.12,-0.05
+34.0,138.08,0.09,-0.03
+34.08,138.0,0.15,-0.07</div>
+        <div class="info-rule" style="margin-top:12px">⚙ Conversion NetCDF HYCOM → CSV (Python) :</div>
+        <div class="info-example">import xarray as xr
+ds = xr.open_dataset("hycom.nc")
+df = ds[["water_u","water_v"]].isel(time=0, depth=0) \
+     .to_dataframe().reset_index()
+df[["lat","lon","water_u","water_v"]] \
+  .dropna().to_csv("courants.csv", index=False)</div>
+      </div>
+    </div>
+
+    <div class="info-section">
+      <div class="info-title">🪨 Lithologie / Sédimentologie — Format CSV</div>
+      <div class="info-fmt">
+        <div class="info-fmt-head">Format CSV sédiments <span class="info-badge green">requis</span></div>
+        <p class="info-desc">Chaque ligne décrit un point de grille avec son type de sédiment codé numériquement.</p>
+        <div class="info-rule">Colonnes requises :</div>
+        <div class="info-cols">
+          <div class="info-col"><b>lat</b><span>latitude décimale</span></div>
+          <div class="info-col"><b>lon</b><span>longitude décimale</span></div>
+          <div class="info-col"><b>soil_id</b><span>entier 0–254</span></div>
+          <div class="info-col"><b>label</b><span>nom du type (texte libre)</span></div>
+        </div>
+        <div class="info-rule">Règles :</div>
+        <ul class="info-list">
+          <li><code>soil_id</code> : entier entre 0 et 254 — la valeur 255 est réservée "non défini" et ignorée</li>
+          <li>Tous les points avec le même <code>soil_id</code> reçoivent automatiquement la même couleur</li>
+          <li>Champ <code>label</code> libre : ex. <i>argile pélagique</i>, <i>sable fin</i>, <i>basalte</i></li>
+          <li><b>La bathymétrie doit être chargée d'abord</b> — nécessaire pour masquer les zones terrestres</li>
+          <li>Taille max recommandée : 300 000 points</li>
+        </ul>
+        <div class="info-example"><span class="info-cmt"># exemple valide</span>
+lat,lon,soil_id,label
+34.0,138.0,3,Argile pélagique
+34.0,138.08,5,Sable fin
+34.08,138.0,3,Argile pélagique</div>
+        <div class="info-rule" style="margin-top:12px">⚙ Conversion EarthByte seabed_lithology_v1.nc → CSV (Python) :</div>
+        <div class="info-example">import xarray as xr, pandas as pd, numpy as np
+
+ds = xr.open_dataset("seabed_lithology_v1.nc")
+<span class="info-cmt"># Voir les variables disponibles</span>
+print(list(ds.data_vars))  <span class="info-cmt"># ex: ['lid']</span>
+
+var = "lid"  <span class="info-cmt"># ou le nom trouvé ci-dessus</span>
+da = ds[var].squeeze()
+lats = da.coords["latitude"].values
+lons = da.coords["longitude"].values
+data = da.values
+
+<span class="info-cmt"># Sous-échantillonnage ×4 pour réduire la taille</span>
+stride = 4
+rows = []
+for i in range(0, len(lats), stride):
+    for j in range(0, len(lons), stride):
+        v = data[i, j]
+        if np.isfinite(v) and v >= 0:
+            rows.append((lats[i], lons[j], int(v), str(int(v))))
+
+df = pd.DataFrame(rows, columns=["lat","lon","soil_id","label"])
+df.to_csv("lithologie.csv", index=False)
+print(f"{len(df)} points exportés")</div>
+      </div>
+    </div>
+
+    <div class="info-section">
+      <div class="info-title">💾 Fichier Projet — GeoJSON</div>
+      <div class="info-fmt">
+        <div class="info-fmt-head">Format .geojson <span class="info-badge" style="background:#6366f1;color:#fff">natif appli</span></div>
+        <p class="info-desc">Format interne de l'application. Généré par <b>💾 Sauvegarder</b> — contient la vue, la bathymétrie, les courants et les sédiments encodés en base64.</p>
+        <ul class="info-list">
+          <li>Ne pas modifier manuellement — le format interne peut changer entre versions</li>
+          <li>Taille variable selon les données chargées (peut dépasser 50 Mo)</li>
+          <li>Restaure entièrement une session via <b>📁 Charger</b></li>
+        </ul>
+      </div>
+    </div>
+
+    <div style="text-align:center;margin-top:24px">
+      <button onclick="toggleInfo()" style="padding:9px 28px;border-radius:8px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-family:'DM Mono',monospace;font-size:12px;cursor:pointer;letter-spacing:.05em">Fermer</button>
+    </div>
   </div>
 </div>
 
@@ -534,6 +726,11 @@ function T(m, t) {
   x.textContent = m;
   if (t !== 'load') setTimeout(function() { e.className = 'tst hi'; }, 6000);
 }
+function toggleInfo() {
+  var o = $('infoOverlay');
+  o.style.display = o.style.display === 'none' ? 'block' : 'none';
+}
+
 function tp() { PO = !PO; $('pnl').className = PO ? 'pnl' : 'pnl shut'; uLP(); uTrnOffset(); if (PO) uDS(); }
 function op() { PO = true; $('pnl').className = 'pnl'; uLP(); }
 function uLP() { $('lgd').className = PO && window.innerWidth > 768 ? 'lgd po' : 'lgd'; }
@@ -817,7 +1014,7 @@ function go() {
       $('btnClear').style.display = 'inline-flex';
     }).catch(function(e) { T(e.message, 'err'); $('btnGo').disabled = false; });
 }
-M.on('moveend', function() { if (PO) uDS(); });
+M.on('moveend', function() { uDS(); });
 
 // ──────────── CLEAR SEARCH ────────────
 function clearSearch() {
@@ -844,10 +1041,10 @@ function clearSearch() {
   $('cLeg').style.display = 'none';
   $('lLeg').style.display = 'none';
   $('wxLeg').style.display = 'none';
-  $('dsA').innerHTML = '<p style="font-size:11px;color:var(--text2)">Cliquez "Rechercher" pour générer les liens.</p>';
-  $('dsC').innerHTML = '<p style="font-size:11px;color:var(--text2)">Liens après "Rechercher"</p>';
   $('rA').innerHTML = '';
   $('wxInfo').textContent = '';
+  // Refresh download panel for new position
+  uDS();
   // Reset slider values
   $('oSI').value = 100; $('oSB').value = 60; $('oSC').value = 85; $('oSL').value = 55;
   // Hide clear button
@@ -855,24 +1052,142 @@ function clearSearch() {
   T('Recherche effacée', 'ok');
 }
 
-// ──────────── DATASET LINKS ────────────
+// ──────────── DATASET DOWNLOAD ────────────
+function getBbox() {
+  var b = M.getBounds();
+  return {
+    s: Math.max(-90,  b.getSouth()),
+    n: Math.min(90,   b.getNorth()),
+    w: Math.max(-180, b.getWest()),
+    e: Math.min(180,  b.getEast())
+  };
+}
+function fmtCoord(v, isLat) {
+  var d = Math.abs(v).toFixed(3);
+  if (isLat) return d + (v >= 0 ? '°N' : '°S');
+  return d + (v >= 0 ? '°E' : '°W');
+}
+function bboxHTML(bb) {
+  return '<div class="bbox-row">' +
+    '<div class="bbox-chip"><b>' + fmtCoord(bb.n, true) + '</b>Nord</div>' +
+    '<div class="bbox-chip"><b>' + fmtCoord(bb.s, true) + '</b>Sud</div>' +
+    '<div class="bbox-chip"><b>' + fmtCoord(bb.w, false) + '</b>Ouest</div>' +
+    '<div class="bbox-chip"><b>' + fmtCoord(bb.e, false) + '</b>Est</div>' +
+  '</div>';
+}
+
+async function fetchAndSave(url, filename, btn) {
+  var orig = btn.textContent;
+  btn.disabled = true; btn.textContent = '⏳ Téléchargement...';
+  T('Téléchargement : ' + filename + ' ...', 'load');
+  try {
+    var res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status + ' — ' + res.statusText);
+    var blob = await res.blob();
+    if (blob.size < 50) throw new Error('Réponse vide ou hors limites');
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename; a.click();
+    T('✓ ' + filename + ' téléchargé (' + (blob.size / 1024 | 0) + ' Ko)', 'ok');
+    btn.textContent = '✓ Téléchargé';
+    setTimeout(function() { btn.textContent = orig; btn.disabled = false; }, 3000);
+  } catch(e) {
+    T('Erreur : ' + e.message, 'err');
+    btn.textContent = orig; btn.disabled = false;
+  }
+}
+
+function openGEBCO(bb) {
+  // GEBCO Data Download Tool with pre-filled bbox via URL fragment
+  var url = 'https://download.gebco.net/#' +
+    'north=' + bb.n.toFixed(3) +
+    '&south=' + bb.s.toFixed(3) +
+    '&west='  + bb.w.toFixed(3) +
+    '&east='  + bb.e.toFixed(3);
+  window.open(url, '_blank');
+}
+
+function dlETOPO(btn) {
+  var bb = getBbox();
+  // Auto stride to cap at ~500 rows × 500 cols
+  var latRange = bb.n - bb.s, lonRange = bb.e - bb.w;
+  var stride = Math.max(0.01, Math.ceil(Math.max(latRange, lonRange) / 5) * 0.01);
+  stride = +stride.toFixed(3);
+  var url = 'https://coastwatch.pfeg.noaa.gov/erddap/griddap/etopo180.csv' +
+    '?altitude[(' + bb.s.toFixed(3) + '):(' + stride + '):(' + bb.n.toFixed(3) + ')]' +
+    '[(' + bb.w.toFixed(3) + '):(' + stride + '):(' + bb.e.toFixed(3) + ')]';
+  var fname = 'etopo_' + bb.s.toFixed(1) + '_' + bb.n.toFixed(1) + '.csv';
+  fetchAndSave(url, fname, btn);
+}
+
+function dlHYCOM(btn) {
+  var bb = getBbox();
+  var dep = snapToHYCOM(+$('inD').value || 200);
+  // ESPC-D-V02 FMRC best aggregation — continuously updated, replaces expt_93.0 (ended Sep 2024)
+  // Longitudes must be 0-360
+  var w360 = bb.w < 0 ? bb.w + 360 : bb.w;
+  var e360 = bb.e < 0 ? bb.e + 360 : bb.e;
+  // Use 2 days ago to ensure data availability
+  var d = new Date(); d.setDate(d.getDate() - 2);
+  var iso = d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0') + 'T12:00:00Z';
+  var url = 'https://ncss.hycom.org/thredds/ncss/grid/FMRC_ESPC-D-V02_uv3z/FMRC_ESPC-D-V02_uv3z_best.ncd' +
+    '?var=water_u&var=water_v' +
+    '&north=' + bb.n.toFixed(2) + '&south=' + bb.s.toFixed(2) +
+    '&west='  + w360.toFixed(2) + '&east='  + e360.toFixed(2) +
+    '&disableLLSubset=on&disableProjSubset=on&horizStride=1' +
+    '&time=' + iso + '&vertCoord=' + dep + '&accept=netcdf4';
+  window.open(url, '_blank');
+  T('HYCOM ESPC-D-V02 — ' + iso.slice(0,10) + ' (.nc) lancé', 'ok');
+}
+
+function dlETOPO(btn) {
+  var bb = getBbox();
+  var stride = Math.max(0.01, Math.ceil(Math.max(bb.n - bb.s, bb.e - bb.w) / 5) * 0.01).toFixed(3);
+  var url = 'https://coastwatch.pfeg.noaa.gov/erddap/griddap/etopo180.csv' +
+    '?altitude[(' + bb.s.toFixed(3) + '):(' + stride + '):(' + bb.n.toFixed(3) + ')]' +
+    '[(' + bb.w.toFixed(3) + '):(' + stride + '):(' + bb.e.toFixed(3) + ')]';
+  window.open(url, '_blank');
+  T('Téléchargement ETOPO lancé dans un nouvel onglet', 'ok');
+}
+
+function dlLitho() {
+  window.open('https://earthbyte.org/webdav/ftp/papers/Dutkiewicz_etal_seafloor_lithology/seabed_lithology_v1.nc', '_blank');
+  T('Téléchargement lithologie EarthByte lancé', 'ok');
+}
+
+function pickHYCOMRegion() { return 'global'; }
+
 function uDS() {
-  var b = M.getBounds(), s = b.getSouth().toFixed(2), n = b.getNorth().toFixed(2), w = b.getWest().toFixed(2), e = b.getEast().toFixed(2);
-  var cs = 'Nord:' + n + '° Sud:' + s + '° Ouest:' + w + '° Est:' + e + '°';
-  var eu = 'https://coastwatch.pfeg.noaa.gov/erddap/griddap/etopo180.csv?altitude[(' + s + '):(' + n + ')][(' + w + '):(' + e + ')]';
-  $('dsA').innerHTML = '<div class="ds-card"><h4>🌊 GEBCO <span class="badge" style="background:var(--green);color:var(--bg)">~450m</span></h4><ol class="ds-steps"><li>Ouvrez GEBCO Download</li><li>Coordonnées :</li></ol><div class="cb" onclick="cpy(this,\'' + cs + '\')">' + cs + '<span class="ch">copier</span></div><ol class="ds-steps" start="3"><li>Format <b>Esri ASCII</b></li></ol><a class="ds-link" href="https://download.gebco.net/" target="_blank">🔗 GEBCO</a></div><div class="ds-card"><h4>🛰 NOAA ERDDAP <span class="badge" style="background:var(--accent);color:var(--bg)">~1.8km</span></h4><a class="ds-link" href="' + eu + '" target="_blank" download="etopo.csv">⬇ CSV direct</a></div>';
-  uDSC();
+  var bb = getBbox();
+  var area = ((bb.n - bb.s) * (bb.e - bb.w)).toFixed(1);
+  $('dsA').innerHTML =
+    '<div class="ds-card">' +
+      '<h4>🌐 Zone actuelle</h4>' +
+      bboxHTML(bb) +
+      '<p style="color:var(--text2);font-size:10px;margin-top:4px">Surface ~' + area + '°²</p>' +
+    '</div>' +
+    '<div class="ds-card">' +
+      '<h4>🌊 GEBCO 2023 <span class="badge" style="background:var(--green);color:var(--bg)">~450m résol.</span></h4>' +
+      '<p>Haute résolution — ouvre le portail GEBCO avec la zone pré-sélectionnée. Choisissez le format <b>Esri ASCII (.asc)</b>.</p>' +
+      '<button class="dl-btn green" onclick="openGEBCO(getBbox())">🔗 Ouvrir GEBCO Download</button>' +
+    '</div>';
+  uDSC(bb);
 }
-function uDSC() {
-  var dep = +$('inD').value || 651, hDep = snapToHYCOM(dep);
-  var latS, latN, lonW, lonE, src;
-  if (G) { latS = G.la[0]; latN = G.la[G.nr - 1]; lonW = G.lo[0]; lonE = G.lo[G.nc - 1]; src = 'fichier chargé'; }
-  else { var b = M.getBounds(); latS = b.getSouth(); latN = b.getNorth(); lonW = b.getWest(); lonE = b.getEast(); src = 'vue carte'; }
-  var hw = lonW < 0 ? lonW + 360 : lonW, he = lonE < 0 ? lonE + 360 : lonE;
-  var hyU = 'https://www.ncei.noaa.gov/erddap/griddap/HYCOM_reg6_latest3d.csv?water_u[(last)][(' + hDep + '.0)][(' + latS.toFixed(2) + '):(' + latN.toFixed(2) + ')][(' + hw.toFixed(2) + '):(' + he.toFixed(2) + ')],water_v[(last)][(' + hDep + '.0)][(' + latS.toFixed(2) + '):(' + latN.toFixed(2) + ')][(' + hw.toFixed(2) + '):(' + he.toFixed(2) + ')]';
-  var note = hDep !== dep ? ' (ajusté ' + dep + '→' + hDep + 'm)' : '';
-  $('dsC').innerHTML = '<div class="ds-card"><h4>🌊 HYCOM <span class="badge" style="background:#8b5cf6;color:#fff">' + hDep + 'm' + note + '</span></h4><p>Source: ' + src + '</p><a class="ds-link" href="' + hyU + '" target="_blank" download="hycom_' + hDep + 'm.csv">⬇ CSV</a></div>';
+
+function uDSC(bb) {
+  if (!bb) bb = getBbox();
+  var dep = snapToHYCOM(+$('inD').value || 200);
+  $('dsC').innerHTML =
+    '<div class="ds-card">' +
+      '<h4>🌊 HYCOM ESPC-D-V02 <span class="badge" style="background:#a78bfa;color:#fff">' + dep + 'm</span></h4>' +
+      '<p>Courants u/v — système global actuel (succède à expt_93.0), mise à jour continue.</p>' +
+      '<p style="font-size:10px;color:var(--text2)">⚠ Format NetCDF4 (.nc) — à convertir en CSV avant chargement.</p>' +
+      '<button class="dl-btn purple" onclick="dlHYCOM()">🔗 Ouvrir & Télécharger</button>' +
+    '</div>';
 }
+
 function cpy(el, t) { navigator.clipboard.writeText(t).then(function() { el.className = 'cb cp'; setTimeout(function() { el.className = 'cb'; }, 2000); T('Copié', 'ok'); }).catch(function() {}); }
 
 // ──────────── PORTS ────────────
@@ -2598,7 +2913,7 @@ function uTrnOffset() {
 $('inLoc').addEventListener('keyup', function(e) { if (e.key === 'Enter') go(); });
 $('inD').addEventListener('keyup', function(e) { if (e.key === 'Enter') onDepthChange(); });
 window.addEventListener('resize', uLP);
-uLP();
+uLP(); uDS();
 T('Entrez un lieu et une profondeur', 'ok');
 </script>
 </body>
