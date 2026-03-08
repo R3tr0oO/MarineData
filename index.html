@@ -148,9 +148,10 @@ body{font-family:'Instrument Sans',sans-serif;background:var(--bg);color:var(--t
 <div class="tb">
   <div class="logo">Marine Data <span>// bathymetry · currents · sediments</span></div>
   <div class="ctrls">
-    <div class="ig ig-l"><label>Lieu</label><input type="text" id="inLoc" placeholder="Suruga Bay, Japan" value="Suruga Bay, Japan"></div>
-    <div class="ig ig-d"><label>Prof</label><input type="number" id="inD" value="651" min="1" max="11000"><label style="padding-right:8px">m</label></div>
+    <div class="ig ig-l"><label>Lieu</label><input type="text" id="inLoc" placeholder="Suruga Bay, Japan"></div>
+    <div class="ig ig-d"><label>Prof</label><input type="number" id="inD" value="200" min="1" max="11000"><label style="padding-right:8px">m</label></div>
     <button class="btn btn-go" id="btnGo" onclick="go()">Rechercher</button>
+    <button class="btn" id="btnClear" onclick="clearSearch()" title="Effacer la recherche" style="background:var(--bg3);color:var(--accent2);border:1px solid var(--accent2);display:none">✕</button>
     <div class="hist-wrap">
       <button class="hist-btn" id="histBtn" onclick="toggleHist()" title="Historique">🕘</button>
       <div class="hist-dd" id="histDd">
@@ -635,7 +636,7 @@ function refreshAllLayers() {
 }
 
 // ──────────── MAP ────────────
-var M = L.map('map', { center: [34.85, 138.55], zoom: 10, zoomControl: false });
+var M = L.map('map', { center: [20, 0], zoom: 3, zoomControl: false });
 L.control.zoom({ position: 'bottomleft' }).addTo(M);
 
 // ──────────── TILE LAYERS ────────────
@@ -813,9 +814,46 @@ function go() {
       addHist(loc, +$('inD').value, lat, lon, [lat - dLa, lat + dLa, lon - dLo, lon + dLo]);
       fPorts([lat, lon], Math.max(dLa, dLo));
       uDS(); T('Zone OK — panneau → données', 'ok'); op(); $('btnGo').disabled = false;
+      $('btnClear').style.display = 'inline-flex';
     }).catch(function(e) { T(e.message, 'err'); $('btnGo').disabled = false; });
 }
 M.on('moveend', function() { if (PO) uDS(); });
+
+// ──────────── CLEAR SEARCH ────────────
+function clearSearch() {
+  // Remove search rectangle
+  if (SR) { M.removeLayer(SR); SR = null; }
+  // Remove ports
+  PM.forEach(function(m) { M.removeLayer(m); }); PM = [];
+  // Remove isobaths
+  if (IL) { M.removeLayer(IL); IL = null; }
+  // Remove bathy layer
+  if (bathyLayer) { M.removeLayer(bathyLayer); bathyLayer = null; }
+  // Remove currents
+  if (currLayer) { M.removeLayer(currLayer); currLayer = null; }
+  // Remove litho
+  if (lithoLayer) { M.removeLayer(lithoLayer); lithoLayer = null; }
+  // Remove clouds
+  if (cloudLayer) { M.removeLayer(cloudLayer); cloudLayer = null; }
+  // Remove transect
+  closeTransect();
+  // Reset data
+  G = null; CUR = null; LITHO = null; LITHO_MASK = null; CLOUDS = null;
+  // Reset legend sections
+  $('dLeg').style.display = 'none';
+  $('cLeg').style.display = 'none';
+  $('lLeg').style.display = 'none';
+  $('wxLeg').style.display = 'none';
+  $('dsA').innerHTML = '<p style="font-size:11px;color:var(--text2)">Cliquez "Rechercher" pour générer les liens.</p>';
+  $('dsC').innerHTML = '<p style="font-size:11px;color:var(--text2)">Liens après "Rechercher"</p>';
+  $('rA').innerHTML = '';
+  $('wxInfo').textContent = '';
+  // Reset slider values
+  $('oSI').value = 100; $('oSB').value = 60; $('oSC').value = 85; $('oSL').value = 55;
+  // Hide clear button
+  $('btnClear').style.display = 'none';
+  T('Recherche effacée', 'ok');
+}
 
 // ──────────── DATASET LINKS ────────────
 function uDS() {
