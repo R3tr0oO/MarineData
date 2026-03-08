@@ -998,7 +998,14 @@ M.on('movestart', function() { $('ctt').classList.remove('vis'); });
 
 // ──────────── GEOCODE ────────────
 function go() {
-  var loc = $('inLoc').value.trim(); if (!loc) return T('Entrez un lieu', 'err');
+  var loc = $('inLoc').value.trim();
+  // Si pas de lieu : on applique juste la profondeur sur la vue actuelle
+  if (!loc) {
+    onDepthChange();
+    $('btnClear').style.display = 'inline-flex';
+    T('Isobathe ' + $('inD').value + 'm appliquée', 'ok');
+    return;
+  }
   T('Géocodage...', 'load'); $('btnGo').disabled = true;
   fetch('https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(loc) + '&format=json&limit=1')
     .then(function(r) { return r.json(); }).then(function(d) {
