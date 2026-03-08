@@ -1247,6 +1247,7 @@ async function loadBathy(f) {
     }
 
     normalizeGrid(G);
+    ISO_CACHE.clear(); // invalidate marching squares cache
     T('Rendu...', 'load'); await tick();
     renderBathy(); renderIsobaths(); uDSC();
     if (LITHO) { computeLithoMask(); renderLitho(); }
@@ -1328,7 +1329,7 @@ async function parseCSVBathy(t) {
 }
 
 // ──────────── BATHY RENDERER ────────────
-// Uses fillRect per grid cell (no gaps at any zoom level)
+// Uses ImageData (direct pixel buffer) per tile — no per-cell fillStyle/fillRect overhead
 function renderBathy() {
   if (!G) return;
   if (bathyLayer) { M.removeLayer(bathyLayer); bathyLayer = null; }
@@ -1345,11 +1346,12 @@ function renderBathy() {
   var BathyGrid = L.GridLayer.extend({
     createTile: function(coords) {
       var tile = document.createElement('canvas'), sz = this.getTileSize();
-      tile.width = sz.x; tile.height = sz.y;
+      var W = sz.x, H = sz.y;
+      tile.width = W; tile.height = H;
       var ctx = tile.getContext('2d');
 
-      var nw = this._map.unproject([coords.x * sz.x, coords.y * sz.y], coords.z);
-      var se = this._map.unproject([(coords.x + 1) * sz.x, (coords.y + 1) * sz.y], coords.z);
+      var nw = this._map.unproject([coords.x * W, coords.y * H], coords.z);
+      var se = this._map.unproject([(coords.x + 1) * W, (coords.y + 1) * H], coords.z);
       var latN = nw.lat, latS = se.lat, lonW = nw.lng, lonE = se.lng;
       var latSpan = latN - latS, lonSpan = lonE - lonW;
       if (latSpan <= 0 || lonSpan <= 0) return tile;
@@ -1360,28 +1362,51 @@ function renderBathy() {
       var cMin = Math.max(0, Math.min(c0, c1)), cMax = Math.min(nc - 1, Math.max(c0, c1));
       if (rMax < rMin || cMax < cMin) return tile;
 
-      // Cell pixel size
-      var cellH = Math.max(1, Math.ceil(halfLatStep * 2 * (sz.y / latSpan)));
-      var cellW = Math.max(1, Math.ceil(halfLonStep * 2 * (sz.x / lonSpan)));
-      ctx.globalAlpha = 0.5;
+      // ImageData: direct pixel writes — far faster than fillRect per cell
+      var imgData = ctx.createImageData(W, H);
+      var buf = imgData.data; // Uint8ClampedArray [r,g,b,a, ...]
+      var alpha = 128; // ~0.5 opacity
+
+      var scaleX = W / lonSpan, scaleY = H / latSpan;
+      var cellH = Math.max(1, Math.ceil(halfLatStep * 2 * scaleY));
+      var cellW = Math.max(1, Math.ceil(halfLonStep * 2 * scaleX));
+      var halfCH = cellH >> 1, halfCW = cellW >> 1;
+      var lutLen = colorLUT.length;
 
       for (var r = rMin; r <= rMax; r++) {
         var lat = la[r];
+        var py = ((latN - lat) / latSpan * H) | 0;
+        var yMin = Math.max(0, py - halfCH);
+        var yMax = Math.min(H - 1, py + halfCH);
+
         for (var c = cMin; c <= cMax; c++) {
           var v = flat[r * nc + c];
-          if (isNaN(v) || v <= 0) continue;
+          if (v !== v || v <= 0) continue; // fast NaN check: NaN !== NaN
           if (!isInSel(lat, lo[c])) continue;
 
           var di = v | 0;
-          if (di * 3 >= colorLUT.length) continue;
+          var li = di * 3;
+          if (li + 2 >= lutLen) continue;
 
-          var px = ((lo[c] - lonW) / lonSpan) * sz.x;
-          var py = ((latN - lat) / latSpan) * sz.y;
+          var rv = colorLUT[li], gv = colorLUT[li + 1], bv = colorLUT[li + 2];
+          var px = ((lo[c] - lonW) / lonSpan * W) | 0;
+          var xMin = Math.max(0, px - halfCW);
+          var xMax = Math.min(W - 1, px + halfCW);
 
-          ctx.fillStyle = 'rgb(' + colorLUT[di * 3] + ',' + colorLUT[di * 3 + 1] + ',' + colorLUT[di * 3 + 2] + ')';
-          ctx.fillRect(px - cellW / 2, py - cellH / 2, cellW + 1, cellH + 1);
+          for (var y = yMin; y <= yMax; y++) {
+            var rowOff = y * W * 4;
+            for (var x = xMin; x <= xMax; x++) {
+              var off = rowOff + x * 4;
+              buf[off]     = rv;
+              buf[off + 1] = gv;
+              buf[off + 2] = bv;
+              buf[off + 3] = alpha;
+            }
+          }
         }
       }
+
+      ctx.putImageData(imgData, 0, 0);
       return tile;
     }
   });
@@ -1393,37 +1418,48 @@ function renderBathy() {
 }
 
 // ──────────── MARCHING SQUARES ────────────
+// Cache invalidated when G changes
+var ISO_CACHE = new Map();
+
+function _lerp(v1, v2, c1, c2, thr) {
+  return Math.abs(v1 - v2) < .001 ? (c1 + c2) / 2 : c1 + (thr - v1) / (v2 - v1) * (c2 - c1);
+}
+
 function marchingSquares(threshold) {
   if (!G) return [];
+  if (ISO_CACHE.has(threshold)) return ISO_CACHE.get(threshold);
+
   var la = G.la, lo = G.lo, nr = G.nr, nc = G.nc, flat = G.flat, segments = [];
   for (var r = 0; r < nr - 1; r++) {
+    var rOff = r * nc, rOff1 = (r + 1) * nc;
+    var yB = la[r], yT = la[r + 1];
     for (var c = 0; c < nc - 1; c++) {
-      var bl = flat[r * nc + c], br = flat[r * nc + c + 1];
-      var tl = flat[(r + 1) * nc + c], tr = flat[(r + 1) * nc + c + 1];
-      if (isNaN(tl) || isNaN(tr) || isNaN(br) || isNaN(bl)) continue;
+      var bl = flat[rOff + c], br = flat[rOff + c + 1];
+      var tl = flat[rOff1 + c], tr = flat[rOff1 + c + 1];
+      if (tl !== tl || tr !== tr || br !== br || bl !== bl) continue; // fast NaN
       var cs = 0;
       if (tl >= threshold) cs |= 8; if (tr >= threshold) cs |= 4;
       if (br >= threshold) cs |= 2; if (bl >= threshold) cs |= 1;
       if (!cs || cs === 15) continue;
 
-      var yB = la[r], yT = la[r + 1], xL = lo[c], xR = lo[c + 1];
-      function lerp(v1, v2, c1, c2) {
-        return Math.abs(v1 - v2) < .001 ? (c1 + c2) / 2 : c1 + (threshold - v1) / (v2 - v1) * (c2 - c1);
-      }
-      var T2 = [yT, lerp(tl, tr, xL, xR)], B = [yB, lerp(bl, br, xL, xR)];
-      var Le = [lerp(bl, tl, yB, yT), xL], R = [lerp(br, tr, yB, yT), xR];
+      var xL = lo[c], xR = lo[c + 1];
+      var T2 = [yT, _lerp(tl, tr, xL, xR, threshold)];
+      var B  = [yB, _lerp(bl, br, xL, xR, threshold)];
+      var Le = [_lerp(bl, tl, yB, yT, threshold), xL];
+      var R  = [_lerp(br, tr, yB, yT, threshold), xR];
       switch (cs) {
         case 1: case 14: segments.push([Le, B]); break;
         case 2: case 13: segments.push([B, R]); break;
         case 3: case 12: segments.push([Le, R]); break;
         case 4: case 11: segments.push([T2, R]); break;
-        case 5: segments.push([Le, T2], [B, R]); break;
+        case 5:  segments.push([Le, T2], [B, R]); break;
         case 6: case 9: segments.push([T2, B]); break;
         case 7: case 8: segments.push([Le, T2]); break;
         case 10: segments.push([Le, B], [T2, R]); break;
       }
     }
   }
+  ISO_CACHE.set(threshold, segments);
   return segments;
 }
 
@@ -1435,21 +1471,31 @@ function renderIsobaths() {
   IL = L.layerGroup().addTo(M);
 
   var sg = marchingSquares(dep);
+
+  // Filter by selection, then batch into ONE polyline (array of latlng pairs)
+  var mainSegs = [];
   sg.forEach(function(s) {
     var midLat = (s[0][0] + s[1][0]) / 2, midLon = (s[0][1] + s[1][1]) / 2;
     if (!isInSel(midLat, midLon)) return;
-    L.polyline(s, { color: '#ff3d71', weight: 3.5, opacity: 1 }).addTo(IL);
+    mainSegs.push(s);
   });
+  if (mainSegs.length) L.polyline(mainSegs, { color: '#ff3d71', weight: 3.5, opacity: 1 }).addTo(IL);
 
   var ctr = M.getCenter();
   [50, 100, 200, 500, 1000, 1500, 2000, 3000, 5000].forEach(function(d) {
     if (d === dep) return;
     var rs = marchingSquares(d); if (!rs.length) return;
+
+    // Batch all reference isobath segments into ONE polyline
+    var refSegs = [];
     rs.forEach(function(s) {
       var mLat = (s[0][0] + s[1][0]) / 2, mLon = (s[0][1] + s[1][1]) / 2;
       if (!isInSel(mLat, mLon)) return;
-      L.polyline(s, { color: 'rgba(255,255,255,.3)', weight: 1, dashArray: '3,5' }).addTo(IL);
+      refSegs.push(s);
     });
+    if (refSegs.length) L.polyline(refSegs, { color: 'rgba(255,255,255,.3)', weight: 1, dashArray: '3,5' }).addTo(IL);
+
+    // Label: find segment closest to map center
     var best = rs[0], bd = 1e9;
     rs.forEach(function(s) {
       var dd = Math.abs((s[0][0] + s[1][0]) / 2 - ctr.lat) + Math.abs((s[0][1] + s[1][1]) / 2 - ctr.lng);
@@ -2059,10 +2105,9 @@ async function importProject(file) {
             flat: b64ToFloat32(p.flat, p.nr * p.nc)
           };
           normalizeGrid(G);
+          ISO_CACHE.clear();
           hasBathy = true;
           break;
-
-        case 'currents':
           T('Restauration courants...', 'load'); await tick();
           CUR = {
             nr: p.nr, nc: p.nc,
