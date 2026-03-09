@@ -166,6 +166,7 @@ body{font-family:'Instrument Sans',sans-serif;background:var(--bg);color:var(--t
   <div class="ctt-row"><div class="ctt-dot" style="background:var(--accent)"></div><span class="ctt-lbl">Prof</span><span class="ctt-val" id="cttD">—</span></div>
   <div class="ctt-row"><div class="ctt-dot" style="background:var(--accent3)"></div><span class="ctt-lbl">Sol</span><span class="ctt-val" id="cttS">—</span></div>
   <div class="ctt-row"><div class="ctt-dot" style="background:rgb(255,140,0)"></div><span class="ctt-lbl">Courant</span><span class="ctt-val" id="cttC">—</span></div>
+  <div class="ctt-row" id="cttEqRow" style="display:none"><div class="ctt-dot" style="background:#ff7043"></div><span class="ctt-lbl">Séisme</span><span class="ctt-val" id="cttEq">—</span></div>
   <div class="ctt-coords" id="cttCo"></div>
 </div>
 
@@ -244,7 +245,47 @@ body{font-family:'Instrument Sans',sans-serif;background:var(--bg);color:var(--t
       <p style="font-size:9px;color:var(--text2);margin-top:5px">Open-Meteo · Passé illimité (ERA5) · Prévision 16j</p>
       <div id="wxInfo" style="font-size:9px;color:var(--text2);margin-top:3px"></div>
     </div>
-    <div class="sec">6 — Projet</div>
+    <div class="sec">6 — Séismes (USGS)</div>
+    <div class="ds-card" style="padding:10px 12px">
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <div style="display:flex;flex-direction:column;gap:4px;flex:1">
+          <label style="font-size:9px;color:var(--text2);text-transform:uppercase;letter-spacing:.4px">Période</label>
+          <select id="eqPeriod" class="wx-input" style="font-size:10px">
+            <option value="1">24 heures</option>
+            <option value="7" selected>7 jours</option>
+            <option value="30">30 jours</option>
+            <option value="90">3 mois</option>
+            <option value="365">1 an</option>
+          </select>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;flex:1">
+          <label style="font-size:9px;color:var(--text2);text-transform:uppercase;letter-spacing:.4px">Mag. min</label>
+          <select id="eqMag" class="wx-input" style="font-size:10px">
+            <option value="1">≥ 1.0</option>
+            <option value="2">≥ 2.0</option>
+            <option value="2.5" selected>≥ 2.5</option>
+            <option value="4">≥ 4.0</option>
+            <option value="5">≥ 5.0</option>
+            <option value="6">≥ 6.0</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:4px;margin-top:6px;align-items:center">
+        <label style="font-size:9px;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;white-space:nowrap">Trier par</label>
+        <select id="eqSort" class="wx-input" style="font-size:10px;flex:1" onchange="if(EQ)sortAndRenderEQ()">
+          <option value="time" selected>Date (récent→ancien)</option>
+          <option value="magnitude">Magnitude (fort→faible)</option>
+          <option value="depth">Profondeur (profond→superficiel)</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <button class="btn" style="flex:1;font-size:10px;border:1px solid #ff7043;color:#ff7043" onclick="fetchEarthquakes()">🌍 Charger séismes</button>
+        <button class="btn" style="font-size:10px;border:1px solid var(--border);color:var(--text2)" onclick="clearEarthquakes()">✕</button>
+      </div>
+      <p style="font-size:9px;color:var(--text2);margin-top:5px">USGS · Zone visible · Sans clé API</p>
+      <div id="eqInfo" style="font-size:9px;color:var(--text2);margin-top:3px"></div>
+    </div>
+    <div class="sec">7 — Projet</div>
     <div style="display:flex;gap:6px;margin:6px 0">
       <button class="btn" style="flex:1;font-size:11px;border:1px solid var(--green);color:var(--green)" onclick="exportProject()">💾 Sauvegarder</button>
       <button class="btn" style="flex:1;font-size:11px;border:1px solid var(--accent);color:var(--accent)" onclick="$('fInProj').click()">📁 Charger</button>
@@ -295,6 +336,20 @@ body{font-family:'Instrument Sans',sans-serif;background:var(--bg);color:var(--t
     <div id="lLegItems"></div>
     <div id="lLegExtra"></div>
     <div class="opa-row"><label>Opacité</label><input type="range" min="0" max="100" value="55" id="oSL" oninput="setLOp(+this.value)"></div>
+  </div>
+  <div id="eqLeg" style="display:none" class="lsep">
+    <div style="font-size:9px;color:var(--text2);font-family:'DM Mono',monospace;margin-bottom:6px">SÉISMES</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      <svg width="48" height="14" viewBox="0 0 48 14">
+        <circle cx="7" cy="7" r="5" fill="rgba(255,200,50,0.75)" stroke="rgba(255,200,50,1)" stroke-width="1"/>
+        <circle cx="24" cy="7" r="6.5" fill="rgba(255,100,0,0.75)" stroke="rgba(255,100,0,1)" stroke-width="1"/>
+        <circle cx="42" cy="7" r="8" fill="rgba(220,0,0,0.75)" stroke="rgba(220,0,0,1)" stroke-width="1.5"/>
+      </svg>
+      <span style="font-size:9px;color:var(--text2)">M2 → M5 → M8+</span>
+    </div>
+    <div style="width:100%;height:8px;border-radius:3px;margin:4px 0;background:linear-gradient(90deg,rgba(100,180,255,0.8),rgba(60,255,180,0.8),rgba(255,220,0,0.8),rgba(255,80,0,0.8),rgba(180,0,0,0.8))"></div>
+    <div class="depth-labels"><span>0km</span><span>profond</span><span>700km</span></div>
+    <div class="opa-row"><label>Opacité</label><input type="range" min="0" max="100" value="85" id="oSE" oninput="setEQOp(+this.value)"></div>
   </div>
   <div id="wxLeg" style="display:none" class="lsep">
     <div style="font-size:9px;color:var(--text2);font-family:'DM Mono',monospace;margin-bottom:4px">NUAGES</div>
@@ -1037,10 +1092,12 @@ function clearSearch() {
   if (lithoLayer) { M.removeLayer(lithoLayer); lithoLayer = null; }
   // Remove clouds
   if (cloudLayer) { M.removeLayer(cloudLayer); cloudLayer = null; }
+  // Remove earthquakes
+  clearEarthquakes();
   // Remove transect
   closeTransect();
   // Reset data
-  G = null; CUR = null; LITHO = null; LITHO_MASK = null; CLOUDS = null;
+  G = null; CUR = null; LITHO = null; LITHO_MASK = null; CLOUDS = null; EQ = null; EQ_RAW = null;
   // Reset legend sections
   $('dLeg').style.display = 'none';
   $('cLeg').style.display = 'none';
@@ -2453,7 +2510,151 @@ function clearClouds() {
   T('Nuages effacés', 'ok');
 }
 
-// ──────────── PNG EXPORT ────────────
+// ══════════════════════════════════════════
+//  EARTHQUAKES — USGS FDSN
+// ══════════════════════════════════════════
+
+var EQ = null;       // array of features (sorted)
+var eqLayer = null;  // L.layerGroup
+var EQ_RAW = null;   // raw GeoJSON features before sort
+
+function eqDepthColor(km) {
+  // shallow=blue, mid=green-yellow, deep=orange-red
+  var t = Math.min(1, km / 700);
+  var stops = [
+    [100, 180, 255], // 0 km — blue
+    [60,  255, 180], // 175 km — cyan-green
+    [255, 220,   0], // 350 km — yellow
+    [255,  80,   0], // 525 km — orange
+    [180,   0,   0]  // 700 km — dark red
+  ];
+  var si = Math.min(stops.length - 2, (t * (stops.length - 1)) | 0);
+  var lt = (t * (stops.length - 1)) - si;
+  var a = stops[si], b = stops[si + 1];
+  return [
+    (a[0] + (b[0] - a[0]) * lt) | 0,
+    (a[1] + (b[1] - a[1]) * lt) | 0,
+    (a[2] + (b[2] - a[2]) * lt) | 0
+  ];
+}
+
+async function fetchEarthquakes() {
+  var bb = getBbox();
+  var days = +$('eqPeriod').value;
+  var minMag = +$('eqMag').value;
+
+  var end = new Date();
+  var start = new Date(end.getTime() - days * 86400000);
+  var fmt = function(d) { return d.toISOString().split('T')[0]; };
+
+  var url = 'https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson' +
+    '&minmagnitude=' + minMag +
+    '&minlatitude=' + bb.s.toFixed(4) + '&maxlatitude=' + bb.n.toFixed(4) +
+    '&minlongitude=' + bb.w.toFixed(4) + '&maxlongitude=' + bb.e.toFixed(4) +
+    '&starttime=' + fmt(start) + '&endtime=' + fmt(end) +
+    '&orderby=time&limit=2000';
+
+  T('Chargement séismes...', 'load');
+  $('eqInfo').textContent = '';
+
+  try {
+    var resp = await fetch(url);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    var data = await resp.json();
+    EQ_RAW = data.features || [];
+    if (!EQ_RAW.length) { T('Aucun séisme dans cette zone / période', 'ok'); return; }
+    sortAndRenderEQ();
+    T(EQ_RAW.length + ' séismes chargés', 'ok');
+  } catch (e) {
+    T('Erreur USGS: ' + e.message, 'err');
+    console.error('[EQ]', e);
+  }
+}
+
+function sortAndRenderEQ() {
+  if (!EQ_RAW) return;
+  var sortBy = $('eqSort').value;
+  EQ = EQ_RAW.slice().sort(function(a, b) {
+    if (sortBy === 'time')      return b.properties.time - a.properties.time;
+    if (sortBy === 'magnitude') return b.properties.mag - a.properties.mag;
+    if (sortBy === 'depth')     return b.geometry.coordinates[2] - a.geometry.coordinates[2];
+    return 0;
+  });
+  renderEarthquakes();
+}
+
+function renderEarthquakes() {
+  if (!EQ) return;
+  if (eqLayer) { M.removeLayer(eqLayer); eqLayer = null; }
+  eqLayer = L.layerGroup().addTo(M);
+  var op = +$('oSE').value / 100;
+
+  EQ.forEach(function(f) {
+    var coords = f.geometry.coordinates; // [lon, lat, depth]
+    var lon = coords[0], lat = coords[1], depKm = coords[2] || 0;
+    var mag = f.properties.mag || 0;
+    var title = f.properties.title || ('M' + mag);
+    var time = new Date(f.properties.time);
+    var timeStr = time.toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+
+    // Radius scales with magnitude (logarithmic feel)
+    var r = Math.max(3, Math.pow(2, mag) * 1.1);
+    var col = eqDepthColor(depKm);
+    var colStr = 'rgba(' + col[0] + ',' + col[1] + ',' + col[2] + ',';
+
+    var circle = L.circleMarker([lat, lon], {
+      radius: r,
+      fillColor: colStr + (op * 0.75) + ')',
+      color: colStr + Math.min(1, op + 0.15) + ')',
+      weight: mag >= 5 ? 2 : 1,
+      fillOpacity: 1
+    });
+
+    circle.on('mouseover', function(e) {
+      $('cttEqRow').style.display = '';
+      $('cttEq').textContent = 'M' + mag.toFixed(1) + ' · ' + depKm.toFixed(0) + 'km · ' + timeStr;
+      $('cttEq').style.color = colStr + '1)';
+      $('ctt').classList.add('vis');
+    });
+    circle.on('mouseout', function() {
+      $('cttEqRow').style.display = 'none';
+    });
+    circle.bindPopup(
+      '<b style="color:#ff7043">' + title + '</b><br>' +
+      '<span style="font-size:10px;font-family:DM Mono,monospace">' +
+      '📅 ' + timeStr + '<br>' +
+      '📍 ' + lat.toFixed(3) + '°N, ' + lon.toFixed(3) + '°E<br>' +
+      '⬇ Prof. foyer : ' + depKm.toFixed(1) + ' km' +
+      '</span>',
+      { maxWidth: 240 }
+    );
+
+    circle.addTo(eqLayer);
+  });
+
+  // Stats
+  var mags = EQ.map(function(f) { return f.properties.mag; });
+  var maxMag = Math.max.apply(null, mags);
+  var avgMag = (mags.reduce(function(s, m) { return s + m; }, 0) / mags.length).toFixed(1);
+  $('eqInfo').textContent = EQ.length + ' evt · max M' + maxMag.toFixed(1) + ' · moy M' + avgMag;
+  $('eqLeg').style.display = 'block';
+}
+
+function setEQOp(v) {
+  if (!EQ) return;
+  renderEarthquakes(); // re-render with new opacity baked in
+}
+
+function clearEarthquakes() {
+  if (eqLayer) { M.removeLayer(eqLayer); eqLayer = null; }
+  EQ = null; EQ_RAW = null;
+  $('eqLeg').style.display = 'none';
+  $('eqInfo').textContent = '';
+  $('cttEqRow').style.display = 'none';
+  T('Séismes effacés', 'ok');
+}
+
+
 
 function parseTransformMatrix(el) {
   // Extract x,y translation from CSS transform: matrix(...) or translate3d(...)
