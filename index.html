@@ -950,6 +950,7 @@ M.on('mousemove', function(ev) {
   el.style.left = px + 'px'; el.style.top = py + 'px';
 
   var inSel = isInSel(ll.lat, ll.lng);
+  var rowD = $('cttD').parentNode, rowS = $('cttS').parentNode, rowC = $('cttC').parentNode;
 
   // ── Depth tooltip ──
   if (G && inSel) {
@@ -958,11 +959,11 @@ M.on('mousemove', function(ev) {
       var col = depthColor(depth);
       $('cttD').textContent = depth.toFixed(0) + 'm';
       $('cttD').style.color = col ? 'rgb(' + col[0] + ',' + col[1] + ',' + col[2] + ')' : 'var(--accent)';
-      hasData = true;
-    } else { $('cttD').textContent = '—'; $('cttD').style.color = 'var(--text2)'; }
-  } else { $('cttD').textContent = '—'; $('cttD').style.color = 'var(--text2)'; }
+      rowD.style.display = ''; hasData = true;
+    } else { rowD.style.display = 'none'; }
+  } else { rowD.style.display = 'none'; }
 
-  // ── Litho tooltip (uses pre-computed mask) ──
+  // ── Litho tooltip ──
   if (LITHO && LITHO_MASK && inSel) {
     var lr = bSearch(LITHO.lats, ll.lat), lc = bSearch(LITHO.lons, ll.lng);
     var idx = lr * LITHO.nc + lc;
@@ -971,9 +972,9 @@ M.on('mousemove', function(ev) {
       var nm = LITHO.labels[sid] || ('Type ' + sid);
       var sc = SOIL_COL[sid] || SOIL_FB;
       $('cttS').textContent = nm; $('cttS').style.color = 'rgb(' + sc[0] + ',' + sc[1] + ',' + sc[2] + ')';
-      hasData = true;
-    } else { $('cttS').textContent = '—'; $('cttS').style.color = 'var(--text2)'; }
-  } else { $('cttS').textContent = '—'; $('cttS').style.color = 'var(--text2)'; }
+      rowS.style.display = ''; hasData = true;
+    } else { rowS.style.display = 'none'; }
+  } else { rowS.style.display = 'none'; }
 
   // ── Current tooltip ──
   if (CUR && inSel) {
@@ -985,12 +986,12 @@ M.on('mousemove', function(ev) {
       var dirs = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
       $('cttC').textContent = spd.toFixed(1) + ' cm/s ' + dirs[Math.round(ang / 45) % 8];
       $('cttC').style.color = spd > 5 ? 'rgb(255,30,0)' : spd > 2 ? 'rgb(255,140,0)' : 'rgb(255,255,255)';
-      hasData = true;
-    } else { $('cttC').textContent = '—'; $('cttC').style.color = 'var(--text2)'; }
-  } else { $('cttC').textContent = '—'; $('cttC').style.color = 'var(--text2)'; }
+      rowC.style.display = ''; hasData = true;
+    } else { rowC.style.display = 'none'; }
+  } else { rowC.style.display = 'none'; }
 
   $('cttCo').textContent = ll.lat.toFixed(5) + '°N, ' + ll.lng.toFixed(5) + '°E';
-  el.classList.add('vis'); // always show — coords are always available
+  el.classList.add('vis');
 });
 M.on('mouseout', function() { $('ctt').classList.remove('vis'); });
 M.on('movestart', function() { $('ctt').classList.remove('vis'); });
@@ -2916,6 +2917,31 @@ function drawTransectProfile(dists, depths, totalDist, minD, maxD) {
   ctx.fillStyle = grad;
   ctx.fill();
   ctx.restore();
+
+  // ── Chosen depth highlight ──
+  var chosenDep = +$('inD').value;
+  if (chosenDep >= dMin && chosenDep <= dMax) {
+    var yDep = PAD.t + (cH * (chosenDep - dMin) / dRange);
+
+    // Dashed horizontal line at chosen depth
+    ctx.save();
+    ctx.setLineDash([6, 4]);
+    ctx.strokeStyle = '#ffc644';
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = 0.9;
+    ctx.beginPath();
+    ctx.moveTo(PAD.l, yDep);
+    ctx.lineTo(PAD.l + cW, yDep);
+    ctx.stroke();
+    ctx.restore();
+
+    // Label on the line
+    ctx.font = 'bold 9px "DM Mono",monospace';
+    ctx.fillStyle = '#ffc644';
+    ctx.textAlign = 'left';
+    var labelY = yDep > PAD.t + 12 ? yDep - 4 : yDep + 12;
+    ctx.fillText(chosenDep + 'm', PAD.l + 4, labelY);
+  }
 
   // Profile line on top
   ctx.beginPath(); first = true;
